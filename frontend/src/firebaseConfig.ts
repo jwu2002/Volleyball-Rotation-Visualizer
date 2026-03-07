@@ -2,13 +2,13 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDOV_6hv6jEhSxKr8cpBxkhmKVlOy-7dfI",
-  authDomain: "volleyball-visualization.firebaseapp.com",
-  projectId: "volleyball-visualization",
-  storageBucket: "volleyball-visualization.firebasestorage.app",
-  messagingSenderId: "982533496737",
-  appId: "1:982533496737:web:3762717ae761b9c78075e0",
-  measurementId: "G-RJ2YGBT8M4"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
 const app = initializeApp(firebaseConfig);
