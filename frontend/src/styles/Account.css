@@ -1,0 +1,139 @@
+/* Account chip and dropdown (header) */
+
+.account-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 0.8125rem;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.account-chip:hover {
+  border-color: var(--border-focus);
+  background: #222226;
+}
+
+.account-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.account-avatar.signed-in {
+  background: rgba(34, 197, 94, 0.25);
+  color: #4ade80;
+}
+
+.account-avatar.guest {
+  background: var(--border);
+  color: var(--text-muted);
+}
+
+.account-label {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.account-value {
+  font-size: 0.8125rem;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-dropdown {
+  position: absolute;
+  right: 0;
+  margin-top: 8px;
+  width: 280px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 14px 16px;
+  z-index: 2000;
+  border: 1px solid var(--border);
+}
+
+.account-dropdown p {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0 0 12px 0;
+  line-height: 1.45;
+}
+
+.account-dropdown .btn {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 0.8125rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.account-dropdown .btn:hover {
+  background: #26262b;
+  border-color: var(--border-focus);
+}
+
+.account-dropdown-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 10px 0 12px;
+}
+
+.account-dropdown input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 0.8125rem;
+  margin-bottom: 6px;
+}
+
+.account-dropdown input::placeholder {
+  color: var(--text-dim);
+}
+
+.account-dropdown .btn-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.account-dropdown .btn-sign-out {
+  margin-top: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  transition: background 0.2s, color 0.2s;
+}
+
+.account-dropdown .btn-sign-out:hover {
+  background: #26262b;
+  color: var(--text);
+}

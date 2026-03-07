@@ -1,0 +1,309 @@
+/* Plan Ahead view – tables, courts, rotation controls */
+
+.plan-ahead {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.plan-ahead-top {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  min-height: 28px;
+}
+
+.plan-ahead-serve-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.plan-ahead-serve-toggle .plan-ahead-label {
+  margin-right: 0;
+}
+
+.plan-ahead-group,
+.plan-ahead-control-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.plan-ahead-control-group .control-check {
+  font-size: 0.6875rem;
+}
+
+.plan-ahead-control-group .btn-rotation {
+  width: 28px;
+  height: 28px;
+  font-size: 0.8125rem;
+}
+
+.plan-ahead-label {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.plan-ahead-select {
+  padding: 3px 6px;
+  font-size: 0.6875rem;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.plan-ahead-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.plan-ahead-rotation-control {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.plan-ahead-rot-btn {
+  padding: 3px 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  min-width: 26px;
+}
+
+.plan-ahead-rot-btn:hover {
+  background: var(--bg-elevated);
+  border-color: var(--text-muted);
+}
+
+.plan-ahead-rot-btn:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.plan-ahead-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.plan-ahead-table-panel {
+  flex-shrink: 0;
+  min-width: 280px;
+  overflow: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.plan-ahead-compact-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.plan-ahead-compact-table thead th {
+  padding: 6px 8px 6px 0;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.plan-ahead-compact-table-team-row th {
+  padding: 6px 8px 8px 0;
+  border-top: 3px solid transparent;
+  font-size: 0.8125rem;
+}
+
+.plan-ahead-pos-header {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.plan-ahead-team-header {
+  text-align: center;
+  white-space: nowrap;
+  min-width: 8em;
+}
+
+.plan-ahead-compact-table tbody tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.plan-ahead-compact-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.plan-ahead-compact-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.plan-ahead-pos-cell {
+  padding: 4px 12px 4px 0;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.plan-ahead-num-cell {
+  padding: 4px 8px;
+  vertical-align: middle;
+  width: 56px;
+}
+
+.plan-ahead-num-cell .plan-ahead-compact-num {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.plan-ahead-compact-num {
+  padding: 4px 6px;
+  font-size: 0.75rem;
+  text-align: center;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.plan-ahead-compact-num::placeholder {
+  color: var(--text-dim);
+}
+
+.plan-ahead-serve-btn {
+  padding: 3px 8px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.plan-ahead-serve-btn:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.plan-ahead-serve-btn:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.plan-ahead-serve-btn.active {
+  background: var(--team-color, var(--accent));
+  color: #fff;
+  border-color: var(--team-color, var(--accent));
+}
+
+.plan-ahead-court-row,
+.plan-ahead-courts-row {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.plan-ahead-court-with-rotations {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 10px;
+  padding: 10px;
+}
+
+.plan-ahead-court-wrapper {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plan-ahead-court-rotation-sidebar {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-shrink: 0;
+  padding: 8px 0;
+}
+
+.plan-ahead-court-rotation-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.plan-ahead-court-rotation-block .plan-ahead-label {
+  font-size: 0.6875rem;
+}
+
+.plan-ahead-courts-row {
+  flex-direction: row;
+  gap: 12px;
+  justify-content: flex-start;
+  padding: 12px;
+}
+
+.plan-ahead-court-cell {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-ahead-court-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.plan-ahead-court-scaled {
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.plan-ahead-court-wrap {
+  border-radius: var(--radius);
+  overflow: hidden;
+}
