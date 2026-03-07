@@ -1,5 +1,3 @@
-/* Visualizer view – controls, court toolbar, draw tools, court layout */
-
 .controls {
   flex-shrink: 0;
   display: flex;
