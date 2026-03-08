@@ -9,7 +9,7 @@ import "./styles/Modals.css";
 import { auth } from "./firebaseConfig";
 import { default51Rotations, default62Rotations } from "./data/defaultRotations";
 import type { SavedPlan } from "./types/savedConfig";
-import { getSavedPlans, savePlan } from "./storage/configStorage";
+import { fetchSavedPlans, savePlan } from "./storage/configStorage";
 import { getRotationSet, applyLiberoToBackRowMiddle } from "./utils/visualizerRotations";
 import { getDisplayLabel } from "./utils/lineupHelpers";
 import { AppHeader } from "./components/AppHeader";
@@ -80,16 +80,26 @@ function App() {
     });
   }, [getPlayersForRotation, planAheadSystemB, planAheadLineupB, planAheadServeTeam]);
 
-  const fetchSavedPlansForPlanAhead = useCallback(() => {
-    const userId = auth.currentUser?.uid ?? "guest";
-    setSavedPlans(getSavedPlans(userId));
+  const fetchSavedPlansForPlanAhead = useCallback(async () => {
+    const u = auth.currentUser;
+    if (!u) {
+      setSavedPlans([]);
+      return;
+    }
+    try {
+      const token = await u.getIdToken();
+      const list = await fetchSavedPlans(token);
+      setSavedPlans(list);
+    } catch {
+      setSavedPlans([]);
+    }
   }, []);
 
   useEffect(() => {
     fetchSavedPlansForPlanAhead();
   }, [user, fetchSavedPlansForPlanAhead]);
 
-  const handleSavePlanSubmit = useCallback(() => {
+  const handleSavePlanSubmit = useCallback(async () => {
     const u = auth.currentUser;
     if (!u) {
       alert("Sign in to save plans.");
@@ -107,10 +117,11 @@ function App() {
         rotationB: planAheadRotationB,
         annotations: JSON.parse(JSON.stringify(planAheadAnnotations)) as Annotation[],
       };
-      savePlan(u.uid, name, payload);
+      const token = await u.getIdToken();
+      await savePlan(u.uid, name, payload, token);
       visualizerViewCtx.setShowSavePlanModal(false);
       visualizerViewCtx.setSavePlanName("");
-      fetchSavedPlansForPlanAhead();
+      await fetchSavedPlansForPlanAhead();
       alert("Plan saved.");
     } catch (err) {
       console.error("Error saving plan:", err);

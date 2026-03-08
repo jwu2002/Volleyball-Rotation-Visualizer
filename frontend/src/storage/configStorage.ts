@@ -5,6 +5,7 @@ import type {
   SavedPlanPayload,
 } from "../types/savedConfig";
 import type { Lineup, SavedLineupItem } from "../components/StartingLineup";
+import { lineupsApi, configsApi, plansApi } from "../api/client";
 
 const VISUALIZER_KEY_PREFIX = "vb_visualizer_configs_";
 const PLANS_KEY_PREFIX = "vb_plans_";
@@ -42,13 +43,34 @@ export function getSavedLineups(userId: string): SavedLineupItem[] {
   }
 }
 
+export async function fetchSavedLineups(token: string): Promise<SavedLineupItem[]> {
+  const list = await lineupsApi.list(token);
+  return list.map((o) => ({
+    id: o.id,
+    name: o.name,
+    lineup: (o.lineup || {}) as Lineup,
+    showNumber: o.showNumber !== false,
+    showName: o.showName === true,
+  }));
+}
+
 export function saveLineup(
   userId: string,
   name: string,
   lineup: Lineup,
   showNumber: boolean,
-  showName: boolean
-): SavedLineupItem {
+  showName: boolean,
+  token?: string | null
+): SavedLineupItem | Promise<SavedLineupItem> {
+  if (token) {
+    return lineupsApi.create(token, { name, lineup, showNumber, showName }).then((o) => ({
+      id: o.id,
+      name: o.name,
+      lineup: (o.lineup || {}) as Lineup,
+      showNumber: o.showNumber !== false,
+      showName: o.showName === true,
+    }));
+  }
   const list = getSavedLineups(userId);
   const id = `lineup_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const item: SavedLineupItem = { id, name, lineup, showNumber, showName };
@@ -63,8 +85,12 @@ export function updateLineup(
   name: string,
   lineup: Lineup,
   showNumber: boolean,
-  showName: boolean
-): void {
+  showName: boolean,
+  token?: string | null
+): void | Promise<void> {
+  if (token) {
+    return lineupsApi.update(token, id, { name, lineup, showNumber, showName }).then(() => {});
+  }
   const list = getSavedLineups(userId);
   const idx = list.findIndex((l) => l.id === id);
   if (idx === -1) return;
@@ -83,11 +109,36 @@ export function getSavedVisualizerConfigs(userId: string): SavedVisualizerConfig
   }
 }
 
+export async function fetchSavedVisualizerConfigs(token: string): Promise<SavedVisualizerConfig[]> {
+  const list = await configsApi.list(token);
+  return list.map((o) => ({
+    id: o.id,
+    name: o.name,
+    system: (o.system === "6-2" ? "6-2" : "5-1") as "5-1" | "6-2",
+    rotations: (o.rotations || []).map((r: unknown) => normalizeRotationSnapshot(r)),
+    createdAt: o.createdAt ? new Date(o.createdAt) : undefined,
+    updatedAt: o.updatedAt ? new Date(o.updatedAt) : undefined,
+  }));
+}
+
 export function saveVisualizerConfig(
   userId: string,
   name: string,
-  payload: SavedVisualizerConfigPayload
-): SavedVisualizerConfig {
+  payload: SavedVisualizerConfigPayload,
+  token?: string | null
+): SavedVisualizerConfig | Promise<SavedVisualizerConfig> {
+  if (token) {
+    return configsApi
+      .create(token, { name, system: payload.system, rotations: payload.rotations })
+      .then((o) => ({
+        ...payload,
+        name: o.name,
+        id: o.id,
+        userId,
+        createdAt: o.createdAt ? new Date(o.createdAt) : undefined,
+        updatedAt: o.updatedAt ? new Date(o.updatedAt) : undefined,
+      }));
+  }
   const configs = getSavedVisualizerConfigs(userId);
   const id = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const now = new Date();
@@ -107,8 +158,14 @@ export function saveVisualizerConfig(
 export function updateVisualizerConfig(
   userId: string,
   id: string,
-  payload: SavedVisualizerConfigPayload
-): void {
+  payload: SavedVisualizerConfigPayload,
+  token?: string | null
+): void | Promise<void> {
+  if (token) {
+    return configsApi
+      .update(token, id, { system: payload.system, rotations: payload.rotations })
+      .then(() => {});
+  }
   const configs = getSavedVisualizerConfigs(userId);
   const idx = configs.findIndex((c) => c.id === id);
   if (idx === -1) return;
@@ -194,7 +251,27 @@ export function getSavedPlans(userId: string): SavedPlan[] {
   }
 }
 
-export function savePlan(userId: string, name: string, payload: SavedPlanPayload): SavedPlan {
+export async function fetchSavedPlans(token: string): Promise<SavedPlan[]> {
+  const list = await plansApi.list(token);
+  return list.map((o) => normalizePlan({ ...o.payload, name: o.name, id: o.id, createdAt: o.createdAt, updatedAt: o.updatedAt }));
+}
+
+export function savePlan(
+  userId: string,
+  name: string,
+  payload: SavedPlanPayload,
+  token?: string | null
+): SavedPlan | Promise<SavedPlan> {
+  if (token) {
+    return plansApi.create(token, { name, payload }).then((o) => ({
+      ...payload,
+      name: o.name,
+      id: o.id,
+      userId,
+      createdAt: o.createdAt ? new Date(o.createdAt) : undefined,
+      updatedAt: o.updatedAt ? new Date(o.updatedAt) : undefined,
+    }));
+  }
   const plans = getSavedPlans(userId);
   const id = `plan_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const now = new Date();
@@ -211,7 +288,15 @@ export function savePlan(userId: string, name: string, payload: SavedPlanPayload
   return plan;
 }
 
-export function updatePlan(userId: string, id: string, payload: SavedPlanPayload): void {
+export function updatePlan(
+  userId: string,
+  id: string,
+  payload: SavedPlanPayload,
+  token?: string | null
+): void | Promise<void> {
+  if (token) {
+    return plansApi.update(token, id, { payload }).then(() => {});
+  }
   const plans = getSavedPlans(userId);
   const idx = plans.findIndex((p) => p.id === id);
   if (idx === -1) return;

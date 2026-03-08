@@ -6,10 +6,10 @@ import { auth } from "../firebaseConfig";
 import { default51Rotations, default62Rotations, COLORS } from "../data/defaultRotations";
 import type { RotationSnapshot, SavedVisualizerConfig } from "../types/savedConfig";
 import {
-  getSavedVisualizerConfigs,
+  fetchSavedVisualizerConfigs,
   saveVisualizerConfig,
   updateVisualizerConfig,
-  getSavedLineups,
+  fetchSavedLineups as fetchSavedLineupsFromApi,
   saveLineup as saveLineupToStorage,
   updateLineup,
 } from "../storage/configStorage";
@@ -105,11 +105,24 @@ export function useVisualizerState(
       setRotation(1);
       return;
     }
-    const userId = auth.currentUser?.uid ?? "guest";
-    setCustomConfigs(getSavedVisualizerConfigs(userId));
-    const list = getSavedLineups(userId);
-    setSavedLineups(list);
-    setSelectedLineupId((prev) => (prev && list.some((l) => l.id === prev)) ? prev : null);
+    const loadFromApi = async () => {
+      const u = auth.currentUser;
+      if (!u) return;
+      try {
+        const token = await u.getIdToken();
+        const [configs, list] = await Promise.all([
+          fetchSavedVisualizerConfigs(token),
+          fetchSavedLineupsFromApi(token),
+        ]);
+        setCustomConfigs(configs);
+        setSavedLineups(list);
+        setSelectedLineupId((prev) => (prev && list.some((l) => l.id === prev)) ? prev : null);
+      } catch {
+        setCustomConfigs([]);
+        setSavedLineups([]);
+      }
+    };
+    loadFromApi();
   }, [user]);
 
   useEffect(() => {
@@ -339,16 +352,35 @@ export function useVisualizerState(
     [customConfigs, loadConfigFromKey]
   );
 
-  const fetchCustomConfigs = useCallback(() => {
-    const userId = auth.currentUser?.uid ?? "guest";
-    setCustomConfigs(getSavedVisualizerConfigs(userId));
+  const fetchCustomConfigs = useCallback(async () => {
+    const u = auth.currentUser;
+    if (!u) {
+      setCustomConfigs([]);
+      return;
+    }
+    try {
+      const token = await u.getIdToken();
+      const configs = await fetchSavedVisualizerConfigs(token);
+      setCustomConfigs(configs);
+    } catch {
+      setCustomConfigs([]);
+    }
   }, []);
 
-  const fetchSavedLineups = useCallback(() => {
-    const userId = auth.currentUser?.uid ?? "guest";
-    const list = getSavedLineups(userId);
-    setSavedLineups(list);
-    setSelectedLineupId((prev) => (prev && list.some((l) => l.id === prev)) ? prev : null);
+  const fetchSavedLineups = useCallback(async () => {
+    const u = auth.currentUser;
+    if (!u) {
+      setSavedLineups([]);
+      return;
+    }
+    try {
+      const token = await u.getIdToken();
+      const list = await fetchSavedLineupsFromApi(token);
+      setSavedLineups(list);
+      setSelectedLineupId((prev) => (prev && list.some((l) => l.id === prev)) ? prev : null);
+    } catch {
+      setSavedLineups([]);
+    }
   }, []);
 
   useEffect(() => {
@@ -402,7 +434,7 @@ export function useVisualizerState(
     };
   }, []);
 
-  const handleOverwriteCurrentConfig = useCallback(() => {
+  const handleOverwriteCurrentConfig = useCallback(async () => {
     if (!customConfigKey.startsWith("custom:")) {
       alert("Only custom configurations can be overwritten.");
       return;
@@ -425,9 +457,10 @@ export function useVisualizerState(
           annotations: JSON.parse(JSON.stringify(r.annotations)),
         })),
       };
-      updateVisualizerConfig(currentUser.uid, id, payload);
+      const token = await currentUser.getIdToken();
+      await updateVisualizerConfig(currentUser.uid, id, payload, token);
       alert("Configuration updated.");
-      fetchCustomConfigs();
+      await fetchCustomConfigs();
     } catch (err) {
       console.error("Error overwriting config:", err);
       alert("Failed to overwrite configuration. Check console for details.");
@@ -467,18 +500,19 @@ export function useVisualizerState(
     setShowSaveLineupModal(true);
   }, [user, selectedLineupId, savedLineups]);
 
-  const handleSaveLineupSubmit = useCallback(() => {
+  const handleSaveLineupSubmit = useCallback(async () => {
     const u = auth.currentUser;
     if (!u) return;
     const name = saveLineupName.trim() || "Unnamed lineup";
     try {
+      const token = await u.getIdToken();
       if (selectedLineupId) {
-        updateLineup(u.uid, selectedLineupId, name, lineup, true, false);
+        await updateLineup(u.uid, selectedLineupId, name, lineup, true, false, token);
       } else {
-        const saved = saveLineupToStorage(u.uid, name, lineup, true, false);
+        const saved = await saveLineupToStorage(u.uid, name, lineup, true, false, token);
         setSelectedLineupId(saved.id);
       }
-      fetchSavedLineups();
+      await fetchSavedLineups();
       setShowSaveLineupModal(false);
       setSaveLineupName("");
     } catch (err) {
@@ -487,7 +521,7 @@ export function useVisualizerState(
     }
   }, [saveLineupName, selectedLineupId, lineup, fetchSavedLineups]);
 
-  const handleSaveNewConfig = useCallback(() => {
+  const handleSaveNewConfig = useCallback(async () => {
     const currentUser = auth.currentUser;
     if (!currentUser) {
       alert("Not signed in yet. Please wait a moment or log in.");
@@ -506,11 +540,12 @@ export function useVisualizerState(
           annotations: JSON.parse(JSON.stringify(r.annotations)),
         })),
       };
-      const saved = saveVisualizerConfig(currentUser.uid, trimmedName, payload);
+      const token = await currentUser.getIdToken();
+      const saved = await saveVisualizerConfig(currentUser.uid, trimmedName, payload, token);
       alert("Configuration saved!");
       setShowSaveModal(false);
       setNewName("");
-      fetchCustomConfigs();
+      await fetchCustomConfigs();
       setCustomConfigKey(`custom:${saved.id}`);
       setSystem(newSystem);
       setRotation(newRotation);
