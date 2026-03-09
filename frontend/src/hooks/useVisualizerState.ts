@@ -131,13 +131,19 @@ export function useVisualizerState(
         setCustomConfigs(configs);
         setSavedLineups(list);
         setSelectedLineupId((prev) => (prev && list.some((l) => l.id === prev)) ? prev : null);
-      } catch {
+      } catch (err) {
         setCustomConfigs([]);
         setSavedLineups([]);
+        const msg = err instanceof Error ? err.message : "Could not load saved data.";
+        if (!msg.includes("VITE_API_URL") && !msg.includes("Railway")) {
+          showToast(msg, "error");
+        } else {
+          showToast("Backend not configured. " + msg, "error");
+        }
       }
     };
     loadFromApi();
-  }, [user, userKey]);
+  }, [user, userKey, showToast]);
 
   useEffect(() => {
     if (!serveReceive) return;
@@ -642,7 +648,8 @@ export function useVisualizerState(
       setSaveLineupName("");
     } catch (err) {
       console.error("Save lineup error:", err);
-      showToast("Failed to save lineup.", "error");
+      const msg = err instanceof Error ? err.message : "Failed to save lineup.";
+      showToast(msg, "error");
     }
   }, [saveLineupName, selectedLineupId, lineup, fetchSavedLineups, showToast]);
 

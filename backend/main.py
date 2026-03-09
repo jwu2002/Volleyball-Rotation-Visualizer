@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -47,13 +49,24 @@ app.add_middleware(SlowAPIMiddleware)
 _origins = ["http://localhost:5173", "http://localhost:3000"]
 if settings.cors_origins:
     _origins.extend(parse_cors_origins(settings.cors_origins))
+# With allow_credentials=True, CORS forbids wildcard for methods/headers; list them explicitly.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
+    expose_headers=[],
 )
+
+
+class LogRequestsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        logger.info("Request: %s %s", request.method, request.url.path)
+        return await call_next(request)
+
+
+app.add_middleware(LogRequestsMiddleware)
 
 
 @app.get("/health")

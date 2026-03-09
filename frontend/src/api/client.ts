@@ -7,14 +7,21 @@ const BASE_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").repla
 function getApiUrl(path: string): string {
   const url = BASE_URL ? `${BASE_URL}${path}` : path;
   if (typeof window !== "undefined") {
-    if (!BASE_URL || BASE_URL === window.location.origin) {
+    const origin = window.location.origin;
+    const isProduction = !origin.startsWith("http://localhost");
+    if (!BASE_URL || BASE_URL === origin) {
       throw new Error(
         "VITE_API_URL must be your Railway backend URL (e.g. https://xxx.up.railway.app). Set it in Vercel → Settings → Environment Variables and redeploy."
       );
     }
-    if (url.startsWith(window.location.origin)) {
+    if (url.startsWith(origin)) {
       throw new Error(
         "VITE_API_URL must be your Railway backend URL, not the frontend URL. Fix it in Vercel environment variables and redeploy."
+      );
+    }
+    if (isProduction && (BASE_URL.startsWith("http://localhost") || BASE_URL.startsWith("http://127.0.0.1"))) {
+      throw new Error(
+        "VITE_API_URL was not set for this build. Add VITE_API_URL (your Railway backend URL) in Vercel → Project → Settings → Environment Variables, then redeploy."
       );
     }
   }
@@ -30,6 +37,7 @@ async function request<T>(
   const url = getApiUrl(path);
   const res = await fetch(url, {
     method,
+    credentials: "omit",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
@@ -38,7 +46,7 @@ async function request<T>(
   });
   if (!res.ok) {
     const text = await res.text();
-    let detail = text;
+    let detail = text || `HTTP ${res.status}`;
     if (res.status === 401) {
       try {
         const j = JSON.parse(text) as { detail?: string };
@@ -47,7 +55,14 @@ async function request<T>(
         detail = text || "Unauthorized";
       }
     }
-    throw new Error(detail || `HTTP ${res.status}`);
+    if (res.status === 405) {
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const wentToWrongServer = url.startsWith(origin) || !url.includes("railway");
+      detail = wentToWrongServer
+        ? `405: Request went to the wrong server (${url}). Set VITE_API_URL to your Railway URL in Vercel → Settings → Environment Variables, then redeploy.`
+        : `405 Method Not Allowed from backend (${url}). Check Railway logs.`;
+    }
+    throw new Error(detail);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
