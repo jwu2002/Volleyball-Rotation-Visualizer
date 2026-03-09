@@ -4,13 +4,31 @@
 
 const BASE_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
+function getApiUrl(path: string): string {
+  const url = BASE_URL ? `${BASE_URL}${path}` : path;
+  if (typeof window !== "undefined") {
+    if (!BASE_URL || BASE_URL === window.location.origin) {
+      throw new Error(
+        "VITE_API_URL must be your Railway backend URL (e.g. https://xxx.up.railway.app). Set it in Vercel → Settings → Environment Variables and redeploy."
+      );
+    }
+    if (url.startsWith(window.location.origin)) {
+      throw new Error(
+        "VITE_API_URL must be your Railway backend URL, not the frontend URL. Fix it in Vercel environment variables and redeploy."
+      );
+    }
+  }
+  return url;
+}
+
 async function request<T>(
   method: string,
   path: string,
   token: string,
   body?: unknown
 ): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const url = getApiUrl(path);
+  const res = await fetch(url, {
     method,
     headers: {
       "Content-Type": "application/json",

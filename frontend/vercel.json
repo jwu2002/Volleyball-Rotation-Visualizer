@@ -1,7 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/((?!assets/|lineups|configs|plans|health).*)",
+      "source": "/:path((?!assets/|lineups|configs|plans|health).*)",
       "destination": "/index.html"
     }
   ]
