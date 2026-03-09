@@ -590,6 +590,19 @@
   overflow: hidden;
 }
 
+@media (max-width: 920px) {
+  .court-column {
+    order: 1;
+    min-height: min(300px, 50vh);
+    min-width: 0;
+  }
+
+  .court-scaled-wrap {
+    min-height: min(260px, 44vh);
+    min-width: 200px;
+  }
+}
+
 .court-scaled-inner {
   display: block;
 }

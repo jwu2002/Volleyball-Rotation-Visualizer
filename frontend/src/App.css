@@ -84,7 +84,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .court-view-wrap {
@@ -93,4 +94,35 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* Small screens: page scrolls so nothing truncates; layout stacks as controls → court → lineup */
+@media (max-width: 920px) {
+  .app {
+    min-height: 100vh;
+    height: auto;
+  }
+
+  .app-card {
+    flex: none;
+  }
+
+  .view-content-wrap {
+    min-height: 280px;
+    flex: none;
+  }
+
+  .court-view-wrap {
+    min-height: 280px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app {
+    padding: 8px 10px;
+  }
+
+  .app-card {
+    padding: 12px 14px 14px;
+  }
 }

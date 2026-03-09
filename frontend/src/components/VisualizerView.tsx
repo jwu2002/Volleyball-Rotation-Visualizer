@@ -533,12 +533,12 @@ export function VisualizerView({ ctx }: Props) {
             >
               <div
                 style={{
-                  transform: `scale(${c.courtScale})`,
-                  transformOrigin: "top left",
                   width: COURT_WIDTH,
                   height: COURT_HEIGHT,
                   minWidth: COURT_WIDTH,
                   minHeight: COURT_HEIGHT,
+                  transform: `scale(${c.courtScale})`,
+                  transformOrigin: "top left",
                 }}
               >
                 {c.courtContainerReady && (

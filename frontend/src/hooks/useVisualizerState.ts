@@ -26,9 +26,6 @@ import {
   LINEUP_STORAGE_KEY,
   COURT_WIDTH,
   COURT_HEIGHT,
-  LINEUP_WIDTH,
-  MAIN_GAP,
-  COURT_TOOLBAR_HEIGHT,
 } from "../constants";
 import { loadLineupFromStorage, getDisplayLabel } from "../utils/lineupHelpers";
 
@@ -429,19 +426,53 @@ export function useVisualizerState(
   }, [lineup]);
 
   useEffect(() => {
-    const el = mainContentRef.current;
+    if (activeView !== "court") return;
+    const el = courtContainerRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
-      const w = el.clientWidth;
-      const h = el.clientHeight;
-      const availW = w - LINEUP_WIDTH - MAIN_GAP;
-      const availH = Math.max(0, h - COURT_TOOLBAR_HEIGHT);
-      const scale = Math.min(1, availW / COURT_WIDTH, availH / COURT_HEIGHT);
+    const updateScale = () => {
+      const target = courtContainerRef.current;
+      if (!target) return;
+      const w = target.clientWidth;
+      const h = target.clientHeight;
+      if (w <= 0 || h <= 0) return;
+      const rawScale = Math.min(w / COURT_WIDTH, h / COURT_HEIGHT);
+      const minScale = w < 400 ? 0.3 : 0.2;
+      const scale = Math.max(minScale, rawScale);
       setCourtScale(scale);
-    });
+    };
+    const raf = requestAnimationFrame(() => updateScale());
+    const t = window.setTimeout(() => updateScale(), 100);
+    const ro = new ResizeObserver(updateScale);
     ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    const mainEl = mainContentRef.current;
+    if (mainEl) ro.observe(mainEl);
+    let resizeTimeouts: ReturnType<typeof setTimeout>[] = [];
+    const onWindowResize = () => {
+      resizeTimeouts.forEach((id) => window.clearTimeout(id));
+      resizeTimeouts = [];
+      updateScale();
+      requestAnimationFrame(updateScale);
+      requestAnimationFrame(() => requestAnimationFrame(updateScale));
+      resizeTimeouts.push(window.setTimeout(updateScale, 100));
+      resizeTimeouts.push(window.setTimeout(updateScale, 400));
+    };
+    window.addEventListener("resize", onWindowResize);
+    const mql = window.matchMedia("(min-width: 921px)");
+    const onMatchChange = () => {
+      updateScale();
+      window.setTimeout(updateScale, 50);
+      window.setTimeout(updateScale, 250);
+    };
+    mql.addEventListener("change", onMatchChange);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+      ro.disconnect();
+      window.removeEventListener("resize", onWindowResize);
+      mql.removeEventListener("change", onMatchChange);
+      resizeTimeouts.forEach((id) => window.clearTimeout(id));
+    };
+  }, [activeView]);
 
   useEffect(() => {
     if (activeView !== "court") {

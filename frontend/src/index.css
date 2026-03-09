@@ -38,19 +38,30 @@
 
 html {
   height: 100%;
-  overflow: hidden;
 }
 
 body {
   margin: 0;
   min-width: 320px;
-  height: 100%;
-  overflow: hidden;
+  min-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 #root {
-  height: 100%;
-  overflow: hidden;
+  min-height: 100%;
+}
+
+/* Desktop: strict height chain so app fills viewport and resize updates layout */
+@media (min-width: 921px) {
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  #root {
+    height: 100%;
+  }
 }
 
 button {
