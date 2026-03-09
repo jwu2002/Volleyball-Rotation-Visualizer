@@ -1,13 +1,15 @@
-import React from "react";
+import React, { useState } from "react";
 import type { RefObject } from "react";
 import "../styles/VisualizerView.css";
 import "../styles/StartingLineup.css";
 import { Court, type Annotation } from "./Court";
-import { StartingLineup, type Lineup, type LineupPositionId, type LineupEntry } from "./StartingLineup";
+import { type Lineup, type LineupPositionId, type LineupEntry } from "./StartingLineup";
+import { LineupTable } from "./LineupTable";
 import { default51Rotations, default62Rotations } from "../data/defaultRotations";
 import type { SavedVisualizerConfig } from "../types/savedConfig";
 import { getRoleColorFromId } from "../utils/visualizerRotations";
 import { COURT_WIDTH, COURT_HEIGHT, COURT_TOOLBAR_HEIGHT } from "../constants";
+import { auth } from "../firebaseConfig";
 
 export type VisualizerPlayer = {
   id: string;
@@ -44,11 +46,18 @@ export type VisualizerViewContext = {
   handleConfirmLiberoSwitch: () => void;
   lineup: Lineup;
   handleLineupChange: (position: LineupPositionId, entry: LineupEntry) => void;
+  lineupShowNumber: boolean;
+  lineupShowName: boolean;
+  setLineupShowNumber: (v: boolean) => void;
+  setLineupShowName: (v: boolean) => void;
   savedLineups: { id: string; name: string; lineup: Lineup; showNumber: boolean; showName: boolean }[];
   selectedLineupId: string | null;
   handleSelectLineup: (id: string | null) => void;
   handleSaveLineupClick: () => void;
+  handleDeleteLineup: (id: string) => void;
+  handleDeleteConfig: (id: string) => void;
   user: { isAnonymous?: boolean; email?: string | null } | null;
+  showToast: (message: string, type?: "success" | "error" | "info") => void;
   fileMenuOpen: boolean;
   setFileMenuOpen: (v: boolean | ((o: boolean) => boolean)) => void;
   activeView: "court" | "planAhead";
@@ -146,6 +155,8 @@ type Props = { ctx: VisualizerViewContext };
 
 export function VisualizerView({ ctx }: Props) {
   const c = ctx;
+  const [signInTooltip, setSignInTooltip] = useState<"lineup" | "saveAs" | null>(null);
+  const needSignIn = !c.user || c.user.isAnonymous;
   return (
     <>
       <div className="controls">
@@ -228,19 +239,66 @@ export function VisualizerView({ ctx }: Props) {
       </div>
 
       <div ref={c.mainContentRef} className="main-content">
-        <StartingLineup
-          lineup={c.lineup}
-          showNumber={true}
-          showName={false}
-          onLineupChange={c.handleLineupChange}
-          onShowNumberChange={() => {}}
-          onShowNameChange={() => {}}
-          savedLineups={c.savedLineups}
-          selectedLineupId={c.selectedLineupId}
-          onSelectLineup={c.handleSelectLineup}
-          onSaveLineupClick={c.handleSaveLineupClick}
-          user={c.user}
-        />
+        <div className="lineup-card">
+          <div className="lineup-title">Lineup</div>
+          <div className="lineup-saved-row">
+            <select
+              className="lineup-select"
+              value={c.selectedLineupId ?? ""}
+              onChange={(e) => c.handleSelectLineup(e.target.value || null)}
+              disabled={!c.user || (c.user?.isAnonymous === true) || c.savedLineups.length === 0}
+              aria-label="Saved lineups"
+            >
+              <option value="">{!c.user || c.user?.isAnonymous || c.savedLineups.length === 0 ? "No lineup created" : "No lineup selected"}</option>
+              {c.savedLineups.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+            <span
+              className="btn-tooltip-wrap"
+              onMouseEnter={() => needSignIn && setSignInTooltip("lineup")}
+              onMouseLeave={() => setSignInTooltip(null)}
+            >
+              <button
+                type="button"
+                className="btn-lineup-save"
+                onClick={c.handleSaveLineupClick}
+                disabled={!c.user || c.user.isAnonymous === true}
+              >
+                Save lineup
+              </button>
+              {needSignIn && (
+                <>
+                  <span className="btn-tooltip-overlay" aria-hidden />
+                  {signInTooltip === "lineup" && (
+                    <span className="signin-tooltip signin-tooltip-lineup" role="tooltip">Sign in to save lineup</span>
+                  )}
+                </>
+              )}
+            </span>
+            <button
+              type="button"
+              className="btn-lineup-delete"
+              onClick={() => c.selectedLineupId && c.handleDeleteLineup(c.selectedLineupId)}
+              disabled={!c.user || !c.selectedLineupId}
+              title="Delete selected lineup"
+              aria-label="Delete selected lineup"
+            >
+              Delete
+            </button>
+          </div>
+          <LineupTable
+            title="Lineup"
+            lineup={c.lineup}
+            onLineupChange={c.handleLineupChange}
+            showNumber={c.lineupShowNumber}
+            showName={c.lineupShowName}
+            onShowNumberChange={c.setLineupShowNumber}
+            onShowNameChange={c.setLineupShowName}
+          />
+        </div>
         <div className="court-column">
           <div className="court-toolbar-wrap">
             <div className="court-toolbar court-toolbar-bar" role="toolbar" aria-label="Court and drawing tools">
@@ -261,12 +319,24 @@ export function VisualizerView({ ctx }: Props) {
                       <div className="court-toolbar-dropdown" role="menu">
                         {c.activeView === "court" && (
                           <>
-                            <button
-                              type="button"
-                              className="court-toolbar-dropdown-item"
-                              role="menuitem"
-                              onClick={() => {
+                            <span
+                              className="court-toolbar-dropdown-item-wrap"
+                              onMouseEnter={() => needSignIn && setSignInTooltip("saveAs")}
+                              onMouseLeave={() => setSignInTooltip(null)}
+                            >
+                              {needSignIn && <span className="court-toolbar-dropdown-item-overlay" aria-hidden />}
+                              <button
+                                type="button"
+                                className="court-toolbar-dropdown-item"
+                                role="menuitem"
+                                disabled={!c.user || c.user.isAnonymous === true}
+                                onClick={() => {
                                 c.setFileMenuOpen(false);
+                                const currentUser = auth.currentUser;
+                                if (!currentUser || currentUser.isAnonymous) {
+                                  c.showToast("Sign in to save configurations.", "info");
+                                  return;
+                                }
                                 const allDefaults = [...default51Rotations, ...default62Rotations];
                                 let sys: "5-1" | "6-2" = c.system;
                                 let rot = c.rotation;
@@ -290,14 +360,18 @@ export function VisualizerView({ ctx }: Props) {
                                 c.setSaveRotationsMulti([false, false, false, false, false, false]);
                                 c.setShowSaveModal(true);
                               }}
-                            >
-                              Save as…
-                            </button>
+                              >
+                                Save as…
+                              </button>
+                              {needSignIn && signInTooltip === "saveAs" && (
+                                <span className="signin-tooltip signin-tooltip-saveas" role="tooltip">Sign in to save configurations</span>
+                              )}
+                            </span>
                             <button
                               type="button"
                               className="court-toolbar-dropdown-item"
                               role="menuitem"
-                              disabled={!c.customConfigKey.startsWith("custom:")}
+                              disabled={!c.user || !c.customConfigKey.startsWith("custom:")}
                               onClick={() => { c.setFileMenuOpen(false); c.handleOverwriteCurrentConfig(); }}
                             >
                               Save
@@ -311,6 +385,10 @@ export function VisualizerView({ ctx }: Props) {
                             role="menuitem"
                             onClick={() => {
                               c.setFileMenuOpen(false);
+                              if (!c.user) {
+                                c.showToast("Sign in to save plans.", "info");
+                                return;
+                              }
                               c.setSavePlanName("");
                               c.setShowSavePlanModal(true);
                             }}

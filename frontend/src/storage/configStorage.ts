@@ -98,6 +98,14 @@ export function updateLineup(
   localStorage.setItem(getLineupsKey(userId), JSON.stringify(list));
 }
 
+export function deleteLineup(userId: string, id: string, token?: string | null): void | Promise<void> {
+  if (token) {
+    return lineupsApi.delete(token, id).then(() => {});
+  }
+  const list = getSavedLineups(userId).filter((l) => l.id !== id);
+  localStorage.setItem(getLineupsKey(userId), JSON.stringify(list));
+}
+
 export function getSavedVisualizerConfigs(userId: string): SavedVisualizerConfig[] {
   try {
     const raw = localStorage.getItem(getVisualizerKey(userId));
@@ -178,6 +186,14 @@ export function updateVisualizerConfig(
     createdAt: configs[idx].createdAt ?? now,
     updatedAt: now,
   };
+  localStorage.setItem(getVisualizerKey(userId), JSON.stringify(configs));
+}
+
+export function deleteVisualizerConfig(userId: string, id: string, token?: string | null): void | Promise<void> {
+  if (token) {
+    return configsApi.delete(token, id).then(() => {});
+  }
+  const configs = getSavedVisualizerConfigs(userId).filter((c) => c.id !== id);
   localStorage.setItem(getVisualizerKey(userId), JSON.stringify(configs));
 }
 

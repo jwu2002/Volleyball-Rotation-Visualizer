@@ -25,7 +25,6 @@ const POSITION_LABELS: Record<LineupPositionId, { label: string; color: string }
 
 type Props = {
   title: string;
-  accentColor: string;
   lineup: Lineup;
   onLineupChange: (position: LineupPositionId, entry: LineupEntry) => void;
   showNumber: boolean;
@@ -36,7 +35,6 @@ type Props = {
 
 export const LineupTable: React.FC<Props> = ({
   title,
-  accentColor,
   lineup,
   onLineupChange,
   showNumber,
@@ -45,7 +43,7 @@ export const LineupTable: React.FC<Props> = ({
   onShowNameChange,
 }) => {
   return (
-    <div className="lineup-table-card" style={{ borderTopColor: accentColor }}>
+    <div className="lineup-table-card">
       <div className="lineup-table-title">{title}</div>
       <div className="lineup-table-options">
         <label className="control-check">
@@ -72,6 +70,12 @@ export const LineupTable: React.FC<Props> = ({
           />
           Initial
         </label>
+      </div>
+      <div className="lineup-table-header">
+        <span className="lineup-table-header-role">Role</span>
+        <span className="lineup-table-header-cell">First</span>
+        <span className="lineup-table-header-cell">Last</span>
+        <span className="lineup-table-header-num">#</span>
       </div>
       <ul className="lineup-table-list">
         {LINEUP_POSITIONS.map((pos) => {

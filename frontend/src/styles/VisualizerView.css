@@ -391,6 +391,49 @@
   z-index: 100;
 }
 
+.court-toolbar-dropdown-item-wrap {
+  position: relative;
+  display: block;
+}
+
+.court-toolbar-dropdown .signin-tooltip {
+  position: absolute;
+  left: 0;
+  transform: none;
+  top: 100%;
+  bottom: auto;
+  margin-bottom: 0;
+  margin-top: 4px;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #fff;
+  background: #1a1a1a;
+  border-radius: 6px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  z-index: 2001;
+  pointer-events: none;
+}
+
+.court-toolbar-dropdown .signin-tooltip::after {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  top: auto;
+  left: 12px;
+  margin-left: 0;
+  border: 4px solid transparent;
+  border-bottom-color: #1a1a1a;
+  border-top: none;
+}
+
+.court-toolbar-dropdown-item-overlay {
+  position: absolute;
+  inset: 0;
+  cursor: not-allowed;
+}
+
 .court-toolbar-dropdown-item {
   display: block;
   width: 100%;

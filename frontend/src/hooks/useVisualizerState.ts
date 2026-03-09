@@ -9,9 +9,11 @@ import {
   fetchSavedVisualizerConfigs,
   saveVisualizerConfig,
   updateVisualizerConfig,
+  deleteVisualizerConfig,
   fetchSavedLineups as fetchSavedLineupsFromApi,
   saveLineup as saveLineupToStorage,
   updateLineup,
+  deleteLineup as deleteLineupFromStorage,
 } from "../storage/configStorage";
 import {
   getDefaultRotationDataInitial,
@@ -22,6 +24,7 @@ import {
   rotations51,
   type Player,
 } from "../utils/visualizerRotations";
+import { sanitizeName } from "../utils/nameSanitize";
 import {
   LINEUP_STORAGE_KEY,
   COURT_WIDTH,
@@ -76,7 +79,10 @@ export function useVisualizerState(
   const [showOutOfRotation, setShowOutOfRotation] = useState(false);
   const [outOfRotationMessage, setOutOfRotationMessage] = useState("");
   const [revertKey, setRevertKey] = useState(0);
-  const [lineup, setLineup] = useState<Lineup>(() => loadLineupFromStorage().lineup);
+  const stored = loadLineupFromStorage();
+  const [lineup, setLineup] = useState<Lineup>(() => stored.lineup);
+  const [lineupShowNumber, setLineupShowNumber] = useState(stored.showNumber);
+  const [lineupShowName, setLineupShowName] = useState(stored.showName);
   const [savedLineups, setSavedLineups] = useState<
     { id: string; name: string; lineup: Lineup; showNumber: boolean; showName: boolean }[]
   >([]);
@@ -426,10 +432,10 @@ export function useVisualizerState(
     try {
       localStorage.setItem(
         LINEUP_STORAGE_KEY,
-        JSON.stringify({ lineup, showNumber: true, showName: false })
+        JSON.stringify({ lineup, showNumber: lineupShowNumber, showName: lineupShowName })
       );
     } catch (_) {}
-  }, [lineup]);
+  }, [lineup, lineupShowNumber, lineupShowName]);
 
   useEffect(() => {
     if (activeView !== "court") return;
@@ -548,9 +554,15 @@ export function useVisualizerState(
     () =>
       players.map((p) => ({
         ...p,
-        label: getDisplayLabel(p.id, p.label, lineup, true, false),
+        label: getDisplayLabel(
+          p.isLibero ? "L" : p.id,
+          p.label,
+          lineup,
+          lineupShowNumber,
+          lineupShowName
+        ),
       })),
-    [players, lineup]
+    [players, lineup, lineupShowNumber, lineupShowName]
   );
 
   const currentConfigDisplayName = useMemo(() => {
@@ -615,14 +627,25 @@ export function useVisualizerState(
 
   const handleSelectLineupResolved = useCallback((id: string | null) => {
     setSelectedLineupId(id);
-    if (!id) return;
+    if (!id) {
+      setLineup({});
+      return;
+    }
     const saved = savedLineups.find((l) => l.id === id);
-    if (saved) setLineup(saved.lineup);
+    if (saved) {
+      setLineup(saved.lineup);
+      setLineupShowNumber(saved.showNumber);
+      setLineupShowName(saved.showName);
+    }
   }, [savedLineups]);
 
   const handleSaveLineupClick = useCallback(() => {
-    if (!user || user.isAnonymous) {
+    if (!user) {
       showToast("Sign in to save lineups.", "info");
+      return;
+    }
+    if (user.isAnonymous) {
+      showToast("Sign in with an account (not guest) to save lineups.", "info");
       return;
     }
     setSaveLineupName(
@@ -633,14 +656,14 @@ export function useVisualizerState(
 
   const handleSaveLineupSubmit = useCallback(async () => {
     const u = auth.currentUser;
-    if (!u) return;
-    const name = saveLineupName.trim() || "Unnamed lineup";
+    if (!u || !user) return;
+    const name = sanitizeName(saveLineupName.trim() || "Unnamed lineup");
     try {
       const token = await u.getIdToken(true);
       if (selectedLineupId) {
-        await updateLineup(u.uid, selectedLineupId, name, lineup, true, false, token);
+        await updateLineup(u.uid, selectedLineupId, name, lineup, lineupShowNumber, lineupShowName, token);
       } else {
-        const saved = await saveLineupToStorage(u.uid, name, lineup, true, false, token);
+        const saved = await saveLineupToStorage(u.uid, name, lineup, lineupShowNumber, lineupShowName, token);
         setSelectedLineupId(saved.id);
       }
       await fetchSavedLineups();
@@ -651,7 +674,56 @@ export function useVisualizerState(
       const msg = err instanceof Error ? err.message : "Failed to save lineup.";
       showToast(msg, "error");
     }
-  }, [saveLineupName, selectedLineupId, lineup, fetchSavedLineups, showToast]);
+  }, [user, saveLineupName, selectedLineupId, lineup, lineupShowNumber, lineupShowName, fetchSavedLineups, showToast]);
+
+  const handleDeleteLineup = useCallback(
+    (id: string) => {
+      const item = savedLineups.find((l) => l.id === id);
+      if (!item) return;
+      if (!user) return;
+      showConfirm("Delete lineup", `Delete "${item.name}"? This cannot be undone.`, async () => {
+        const u = auth.currentUser;
+        if (!u) return;
+        try {
+          const token = await u.getIdToken(true);
+          await deleteLineupFromStorage(u.uid, id, token);
+          if (selectedLineupId === id) {
+            setSelectedLineupId(null);
+          }
+          await fetchSavedLineups();
+          showToast("Lineup deleted.", "success");
+        } catch {
+          showToast("Failed to delete lineup.", "error");
+        }
+      });
+    },
+    [savedLineups, user, selectedLineupId, fetchSavedLineups, showToast, showConfirm]
+  );
+
+  const handleDeleteConfig = useCallback(
+    (id: string) => {
+      const config = customConfigs.find((c) => c.id === id);
+      if (!config) return;
+      if (!user) return;
+      showConfirm("Delete configuration", `Delete "${config.name}"? This cannot be undone.`, async () => {
+        const u = auth.currentUser;
+        if (!u) return;
+        try {
+          const token = await u.getIdToken(true);
+          await deleteVisualizerConfig(u.uid, id, token);
+          if (customConfigKey === `custom:${id}`) {
+            setCustomConfigKey("");
+            updatePlayers(system, rotation);
+          }
+          await fetchCustomConfigs();
+          showToast("Configuration deleted.", "success");
+        } catch {
+          showToast("Failed to delete configuration.", "error");
+        }
+      });
+    },
+    [customConfigs, customConfigKey, user, system, rotation, fetchCustomConfigs, updatePlayers, showToast, showConfirm]
+  );
 
   const handleSaveNewConfig = useCallback(async () => {
     const currentUser = auth.currentUser;
@@ -664,6 +736,7 @@ export function useVisualizerState(
       showToast("Please enter a name for this configuration.", "info");
       return;
     }
+    const name = sanitizeName(trimmedName);
     const defaultData = getDefaultRotationDataInitial(newSystem);
     let rotationsToSave: RotationSnapshot[];
     if (saveConfigMode === "one") {
@@ -690,7 +763,7 @@ export function useVisualizerState(
         rotations: rotationsToSave,
       };
       const token = await currentUser.getIdToken(true);
-      const saved = await saveVisualizerConfig(currentUser.uid, trimmedName, payload, token);
+      const saved = await saveVisualizerConfig(currentUser.uid, name, payload, token);
       showToast("Configuration saved.", "success");
       setShowSaveModal(false);
       setNewName("");
@@ -793,11 +866,18 @@ export function useVisualizerState(
     handleConfirmLiberoSwitch,
     lineup,
     handleLineupChange,
+    lineupShowNumber,
+    lineupShowName,
+    setLineupShowNumber,
+    setLineupShowName,
     savedLineups,
     selectedLineupId,
     handleSelectLineup: handleSelectLineupResolved,
     handleSaveLineupClick,
+    handleDeleteLineup,
+    handleDeleteConfig,
     user,
+    showToast,
     fileMenuOpen,
     setFileMenuOpen,
     activeView,

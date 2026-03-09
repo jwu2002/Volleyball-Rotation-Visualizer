@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     database_url: str = ""
     database_echo: bool = False
+    # Set to false to skip SSL cert verification (e.g. local dev with Railway Postgres). Default None = auto (skip for Railway URLs).
+    database_ssl_verify: Optional[bool] = None
 
     firebase_project_id: Optional[str] = None
 

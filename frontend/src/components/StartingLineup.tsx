@@ -81,7 +81,7 @@ export const StartingLineup: React.FC<Props> = ({
           disabled={!user || user.isAnonymous || savedLineups.length === 0}
           aria-label="Saved lineups"
         >
-          <option value="">{!user || user.isAnonymous || savedLineups.length === 0 ? "No lineup created" : "— Select lineup —"}</option>
+          <option value="">{!user || user.isAnonymous || savedLineups.length === 0 ? "No lineup created" : "No lineup selected"}</option>
           {savedLineups.map((l) => (
             <option key={l.id} value={l.id}>
               {l.name}

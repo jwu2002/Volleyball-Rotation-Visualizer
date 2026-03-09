@@ -86,11 +86,41 @@
   flex-direction: column;
 }
 
+.lineup-explorer-preview {
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.lineup-explorer-preview-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lineup-explorer-preview-detail {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
 .lineup-explorer {
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
+}
+
+.lineup-explorer-item-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lineup-explorer-section {
@@ -106,6 +136,35 @@
   color: var(--text-muted);
   background: rgba(0, 0, 0, 0.15);
   border-bottom: 1px solid var(--border);
+}
+
+.lineup-explorer-item-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.lineup-explorer-item-row .lineup-explorer-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.lineup-explorer-delete {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.lineup-explorer-delete:hover {
+  color: #dc2626;
+  border-color: #dc2626;
 }
 
 .lineup-explorer-item {

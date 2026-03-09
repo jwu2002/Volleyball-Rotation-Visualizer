@@ -1,12 +1,11 @@
 .lineup-table-card {
-  flex: 1;
-  min-width: 280px;
-  max-width: 420px;
+  min-width: 0;
+  max-width: 100%;
   background: var(--bg-elevated);
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  border-top: 3px solid var(--border);
   padding: 12px 14px;
+  overflow-x: auto;
 }
 
 .lineup-table-title {
@@ -25,6 +24,33 @@
   font-size: 0.75rem;
 }
 
+.lineup-table-header {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) minmax(0, 1fr) 40px;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.lineup-table-header-role {
+  font-weight: 600;
+}
+
+.lineup-table-header-cell {
+  min-width: 0;
+}
+
+.lineup-table-header-num {
+  text-align: center;
+}
+
 .lineup-table-list {
   list-style: none;
   margin: 0;
@@ -33,8 +59,8 @@
 
 .lineup-table-item {
   display: grid;
-  grid-template-columns: 36px 1fr 1fr 48px;
-  gap: 6px;
+  grid-template-columns: 32px minmax(0, 1fr) minmax(0, 1fr) 40px;
+  gap: 4px;
   align-items: center;
   margin-bottom: 6px;
   font-size: 0.75rem;
@@ -51,6 +77,8 @@
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text);
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .lineup-table-input::placeholder {

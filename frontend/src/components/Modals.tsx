@@ -1,6 +1,7 @@
 import "../styles/Modals.css";
 import { default51Rotations, default62Rotations } from "../data/defaultRotations";
 import type { SavedVisualizerConfig } from "../types/savedConfig";
+import { MAX_NAME_LENGTH } from "../utils/nameSanitize";
 
 type Player = { id: string; label: string; isFrontRow?: boolean };
 
@@ -32,6 +33,7 @@ export function SaveConfigModal(props: {
           value={props.name}
           onChange={(e) => props.onNameChange(e.target.value)}
           className="modal-input"
+          maxLength={MAX_NAME_LENGTH}
         />
         <div className="modal-section">
           <label>5-1 or 6-2</label>
@@ -137,6 +139,7 @@ export function SaveLineupModal(props: {
           placeholder="Lineup name"
           value={props.name}
           onChange={(e) => props.onNameChange(e.target.value)}
+          maxLength={MAX_NAME_LENGTH}
         />
         <div className="modal-actions">
           <button type="button" className="btn btn-success" onClick={props.onSave}>Save</button>
@@ -164,6 +167,7 @@ export function SavePlanModal(props: {
           placeholder="Plan name"
           value={props.name}
           onChange={(e) => props.onNameChange(e.target.value)}
+          maxLength={MAX_NAME_LENGTH}
         />
         <div className="modal-actions">
           <button type="button" className="btn btn-success" onClick={props.onSave}>Save</button>
@@ -174,26 +178,83 @@ export function SavePlanModal(props: {
   );
 }
 
+function getRotationPreviewLabel(
+  customConfigKey: string,
+  customConfigs: SavedVisualizerConfig[]
+): { title: string; detail: string } {
+  if (!customConfigKey) {
+    return { title: "None", detail: "No rotation loaded." };
+  }
+  if (customConfigKey.startsWith("custom:")) {
+    const id = customConfigKey.replace("custom:", "");
+    const cfg = customConfigs.find((c) => c.id === id);
+    if (!cfg) return { title: "Custom", detail: "—" };
+    const count = Array.isArray(cfg.rotations) ? cfg.rotations.length : 0;
+    return {
+      title: cfg.name,
+      detail: `System: ${cfg.system} · ${count} rotation${count !== 1 ? "s" : ""} saved`,
+    };
+  }
+  const d51 = default51Rotations.find((d) => d.id === customConfigKey);
+  const d62 = default62Rotations.find((d) => d.id === customConfigKey);
+  const d = d51 ?? d62;
+  if (!d) return { title: customConfigKey, detail: "—" };
+  return {
+    title: d.name,
+    detail: `System: ${d.system} · Rotation ${(d as { rotation?: number }).rotation ?? "—"}`,
+  };
+}
+
 export function LineupExplorerModal(props: {
   open: boolean;
   customConfigKey: string;
   customConfigs: SavedVisualizerConfig[];
   onSelect: (key: string) => void;
+  onDeleteConfig?: (id: string) => void;
   onClose: () => void;
 }) {
   if (!props.open) return null;
+  const preview = getRotationPreviewLabel(props.customConfigKey, props.customConfigs);
+  const customItem = (c: SavedVisualizerConfig) => (
+    <div key={c.id} className="lineup-explorer-item-row">
+      <button
+        type="button"
+        className={`lineup-explorer-item ${props.customConfigKey === `custom:${c.id}` ? "active" : ""}`}
+        onClick={() => { props.onSelect(`custom:${c.id}`); props.onClose(); }}
+      >
+        <span className="lineup-explorer-icon">📄</span>
+        <span className="lineup-explorer-item-name" title={c.name}>{c.name}</span>
+      </button>
+      {props.onDeleteConfig && (
+        <button
+          type="button"
+          className="lineup-explorer-delete"
+          onClick={(e) => { e.stopPropagation(); props.onDeleteConfig?.(c.id); }}
+          title="Delete configuration"
+          aria-label={`Delete ${c.name}`}
+        >
+          Delete
+        </button>
+      )}
+    </div>
+  );
   return (
     <div className="modal-overlay" onClick={props.onClose}>
       <div className="modal-panel lineup-explorer-panel" onClick={(e) => e.stopPropagation()}>
         <h3 className="modal-title">Custom rotation</h3>
-        <p className="modal-description" style={{ marginBottom: 12 }}>Choose a lineup to load.</p>
+        <p className="modal-description" style={{ marginBottom: 8 }}>Choose a rotation to load.</p>
+        <div className="lineup-explorer-preview">
+          <div className="lineup-explorer-preview-title">{preview.title}</div>
+          <div className="lineup-explorer-preview-detail">{preview.detail}</div>
+        </div>
         <div className="lineup-explorer">
           <button
             type="button"
             className={`lineup-explorer-item ${!props.customConfigKey ? "active" : ""}`}
             onClick={() => { props.onSelect(""); props.onClose(); }}
           >
-            <span className="lineup-explorer-icon">—</span> None
+            <span className="lineup-explorer-icon">—</span>
+            <span className="lineup-explorer-item-name">None</span>
           </button>
           <div className="lineup-explorer-section">
             <div className="lineup-explorer-section-title">5-1</div>
@@ -204,19 +265,11 @@ export function LineupExplorerModal(props: {
                 className={`lineup-explorer-item ${props.customConfigKey === d.id ? "active" : ""}`}
                 onClick={() => { props.onSelect(d.id); props.onClose(); }}
               >
-                <span className="lineup-explorer-icon">📄</span> {d.name}
+                <span className="lineup-explorer-icon">📄</span>
+                <span className="lineup-explorer-item-name" title={d.name}>{d.name}</span>
               </button>
             ))}
-            {props.customConfigs.filter((c) => c.system === "5-1").map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className={`lineup-explorer-item ${props.customConfigKey === `custom:${c.id}` ? "active" : ""}`}
-                onClick={() => { props.onSelect(`custom:${c.id}`); props.onClose(); }}
-              >
-                <span className="lineup-explorer-icon">📄</span> {c.name}
-              </button>
-            ))}
+            {props.customConfigs.filter((c) => c.system === "5-1").map(customItem)}
           </div>
           <div className="lineup-explorer-section">
             <div className="lineup-explorer-section-title">6-2</div>
@@ -227,19 +280,11 @@ export function LineupExplorerModal(props: {
                 className={`lineup-explorer-item ${props.customConfigKey === d.id ? "active" : ""}`}
                 onClick={() => { props.onSelect(d.id); props.onClose(); }}
               >
-                <span className="lineup-explorer-icon">📄</span> {d.name}
+                <span className="lineup-explorer-icon">📄</span>
+                <span className="lineup-explorer-item-name" title={d.name}>{d.name}</span>
               </button>
             ))}
-            {props.customConfigs.filter((c) => c.system === "6-2").map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className={`lineup-explorer-item ${props.customConfigKey === `custom:${c.id}` ? "active" : ""}`}
-                onClick={() => { props.onSelect(`custom:${c.id}`); props.onClose(); }}
-              >
-                <span className="lineup-explorer-icon">📄</span> {c.name}
-              </button>
-            ))}
+            {props.customConfigs.filter((c) => c.system === "6-2").map(customItem)}
           </div>
         </div>
         <div className="modal-actions" style={{ marginTop: 12 }}>

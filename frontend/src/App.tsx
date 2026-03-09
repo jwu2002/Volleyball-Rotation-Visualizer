@@ -310,6 +310,7 @@ function App() {
           customConfigKey={ctx.customConfigKey}
           customConfigs={ctx.customConfigs}
           onSelect={ctx.handleCustomConfigChange}
+          onDeleteConfig={ctx.handleDeleteConfig}
           onClose={() => ctx.setLineupExplorerOpen(false)}
         />
         <LiberoModal

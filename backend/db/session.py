@@ -10,7 +10,8 @@ from db.base import Base
 database_url = (settings.database_url or "").strip()
 if not database_url:
     raise RuntimeError(
-        "DATABASE_URL is not set. In Railway: Backend service → Variables → add DATABASE_URL as a Reference to your Postgres service → DATABASE_PUBLIC_URL (or DATABASE_URL)."
+        "DATABASE_URL is not set. In Railway: Backend service → Variables → add DATABASE_URL as a Reference to your Postgres service → DATABASE_PUBLIC_URL (or DATABASE_URL). "
+        "Locally: set DATABASE_URL in backend/.env to your Supabase (or other) connection string."
     )
 # Unresolved Railway reference or wrong value looks like ${{...}} or is not a URL
 if "${{" in database_url or not database_url.startswith("postgresql"):
@@ -34,15 +35,18 @@ database_url = re.sub(r"\?&", "?", database_url).rstrip("?")
 
 connect_args = {}
 if use_ssl:
-    is_railway_public = "rlwy.net" in database_url
-    if is_railway_public:
-        # Railway proxy: use permissive SSL context + direct TLS (no STARTTLS)
+    # Use permissive SSL (skip cert verify) for Railway or when explicitly disabled (e.g. local dev with remote DB)
+    if settings.database_ssl_verify is False:
+        skip_verify = True
+    else:
+        skip_verify = "rlwy.net" in database_url or "railway" in database_url.lower()
+    if skip_verify:
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
         ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         connect_args["ssl"] = ssl_ctx
-        connect_args["direct_tls"] = True
+        # Omit direct_tls: some proxies (e.g. Railway) can reset when client uses direct TLS
     else:
         connect_args["ssl"] = True
 # Disable prepared statement cache when using pgbouncer (e.g. Supabase) in transaction/statement mode
