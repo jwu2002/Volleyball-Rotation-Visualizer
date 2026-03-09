@@ -65,7 +65,23 @@ async function request<T>(
     throw new Error(detail);
   }
   if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  const text = await res.text();
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json")) {
+    const looksLikeHtml = /^\s*</.test(text) || text.trimStart().toLowerCase().startsWith("<!doctype");
+    throw new Error(
+      looksLikeHtml
+        ? `Server returned HTML instead of JSON (request to ${url}). Set VITE_API_URL to your Railway backend URL in Vercel → Settings → Environment Variables and redeploy.`
+        : `Server returned ${ct || "non-JSON"} instead of JSON. Check VITE_API_URL and backend.`
+    );
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(
+      `Invalid JSON from API (${url}). You may be hitting the frontend URL; set VITE_API_URL to your Railway backend.`
+    );
+  }
 }
 
 export type SavedLineupItemApi = {
