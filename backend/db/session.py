@@ -32,10 +32,17 @@ database_url = re.sub(r"\?&", "?", database_url).rstrip("?")
 
 connect_args = {}
 if use_ssl:
-    connect_args["ssl"] = True
-    # Railway's proxy often resets STARTTLS; use direct TLS (connect encrypted from the start)
-    if "rlwy.net" in database_url or "railway" in database_url:
+    is_railway = "rlwy.net" in database_url or "railway" in database_url
+    if is_railway:
+        # Railway proxy: use permissive SSL context + direct TLS (no STARTTLS)
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        connect_args["ssl"] = ssl_ctx
         connect_args["direct_tls"] = True
+    else:
+        connect_args["ssl"] = True
 # Disable prepared statement cache when using pgbouncer (e.g. Supabase) in transaction/statement mode
 connect_args["statement_cache_size"] = 0
 
