@@ -125,6 +125,7 @@ export function SaveConfigModal(props: {
 export function SaveLineupModal(props: {
   open: boolean;
   name: string;
+  title?: string;
   onNameChange: (v: string) => void;
   onSave: () => void;
   onClose: () => void;
@@ -133,7 +134,7 @@ export function SaveLineupModal(props: {
   return (
     <div className="modal-overlay">
       <div className="modal-panel">
-        <h3 className="modal-title">Save lineup</h3>
+        <h3 className="modal-title">{props.title ?? "Save lineup as"}</h3>
         <input
           type="text"
           placeholder="Lineup name"
@@ -229,7 +230,7 @@ export function LineupExplorerModal(props: {
         <button
           type="button"
           className="lineup-explorer-delete"
-          onClick={(e) => { e.stopPropagation(); props.onDeleteConfig?.(c.id); }}
+          onClick={(e) => { e.stopPropagation(); if (c.id) props.onDeleteConfig?.(c.id); }}
           title="Delete configuration"
           aria-label={`Delete ${c.name}`}
         >
@@ -241,7 +242,7 @@ export function LineupExplorerModal(props: {
   return (
     <div className="modal-overlay" onClick={props.onClose}>
       <div className="modal-panel lineup-explorer-panel" onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">Custom rotation</h3>
+        <h3 className="modal-title">Custom config</h3>
         <p className="modal-description" style={{ marginBottom: 8 }}>Choose a rotation to load.</p>
         <div className="lineup-explorer-preview">
           <div className="lineup-explorer-preview-title">{preview.title}</div>
@@ -361,6 +362,102 @@ export function Toast(props: {
       >
         ×
       </button>
+    </div>
+  );
+}
+
+export type ExportOptions = { applyLineup: boolean; lineupId: string | null; configId: string | null; rotations: number[] };
+
+export type SavedLineupItem = { id: string; name: string; lineup: unknown; showNumber: boolean; showName: boolean };
+
+export type SavedConfigItem = { id: string; name: string };
+
+export function ExportModal(props: {
+  open: boolean;
+  onClose: () => void;
+  savedLineups: SavedLineupItem[];
+  exportLineupId: string | null;
+  onExportLineupIdChange: (id: string | null) => void;
+  customConfigs: SavedConfigItem[];
+  exportConfigId: string | null;
+  onExportConfigIdChange: (id: string | null) => void;
+  rotations: boolean[];
+  onRotationsChange: (index: number, checked: boolean) => void;
+  onExport: (opts: ExportOptions) => Promise<void>;
+  exporting: boolean;
+}) {
+  if (!props.open) return null;
+  const selectedRotations = props.rotations.map((v, i) => (v ? i + 1 : 0)).filter(Boolean);
+  const canExport = selectedRotations.length > 0;
+  return (
+    <div className="modal-overlay">
+      <div className="modal-panel export-modal-panel">
+        <h3 className="modal-title">Export as PDF</h3>
+        <p className="modal-description">Export a one-page rotation sheet with tables and court diagrams. You can preview the PDF before saving.</p>
+
+        <div className="modal-section">
+          <label className="modal-section-label">Configuration</label>
+          <select
+            className="modal-input"
+            value={props.exportConfigId ?? ""}
+            onChange={(e) => props.onExportConfigIdChange(e.target.value || null)}
+            style={{ marginBottom: 0 }}
+          >
+            <option value="">Current configuration</option>
+            {props.customConfigs.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="modal-section">
+          <label className="modal-section-label">Lineup</label>
+          <select
+            className="modal-input"
+            value={props.exportLineupId ?? ""}
+            onChange={(e) => props.onExportLineupIdChange(e.target.value || null)}
+            style={{ marginBottom: 0 }}
+          >
+            <option value="">None</option>
+            {props.savedLineups.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+          {props.savedLineups.length === 0 && (
+            <p className="modal-description export-note" style={{ marginTop: 6 }}>No lineups saved. Save a lineup to apply names/numbers in the export.</p>
+          )}
+        </div>
+
+        <div className="modal-section">
+          <label className="modal-section-label">Rotations to include</label>
+          <div className="export-rotations-row">
+            {[1, 2, 3, 4, 5, 6].map((r) => (
+              <label key={r} className="export-check-row">
+                <input
+                  type="checkbox"
+                  checked={props.rotations[r - 1]}
+                  onChange={(e) => props.onRotationsChange(r - 1, e.target.checked)}
+                />
+                <span>{r}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="btn btn-success"
+            disabled={!canExport || props.exporting}
+            onClick={() => props.onExport({ applyLineup: !!props.exportLineupId, lineupId: props.exportLineupId, configId: props.exportConfigId, rotations: selectedRotations })}
+          >
+            {props.exporting ? "Exporting…" : "Export PDF"}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={props.onClose} disabled={props.exporting}>
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

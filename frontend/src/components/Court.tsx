@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from "react";
+import React, { useRef, useCallback, useImperativeHandle, forwardRef } from "react";
 import { Stage, Layer, Rect, Line, Arrow, Circle } from "react-konva";
 import { PlayerCircle } from "./PlayerCircle";
 export type Annotation = {
@@ -91,29 +91,39 @@ function mergeBoundingBoxes(
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
 }
 
-export const Court: React.FC<Props> = ({
-  players,
-  isLocked,
-  onDragEnd,
-  onColorChange,
-  revertKey = 0,
-  annotations = [],
-  drawMode = false,
-  drawTool = "select",
-  pencilColor = ANNOTATION_STROKE,
-  arrowColor = ANNOTATION_STROKE,
-  arrowTension = 0,
-  selectedAnnotationIndices = [],
-  onAnnotationAdd,
-  onAnnotationsClear: _onAnnotationsClear,
-  onAnnotationRemove,
-  onSelectionChange,
-  onDrawActionStart,
-  onSelectionDragStart,
-  onSelectedAnnotationsMove,
-  onAnnotationUpdate,
-  onClearSelection,
-}) => {
+export type CourtRef = { getDataURL: (options?: { pixelRatio?: number }) => string | undefined };
+
+export const Court = forwardRef<CourtRef, Props>(function Court(
+  {
+    players,
+    isLocked,
+    onDragEnd,
+    onColorChange,
+    revertKey = 0,
+    annotations = [],
+    drawMode = false,
+    drawTool = "select",
+    pencilColor = ANNOTATION_STROKE,
+    arrowColor = ANNOTATION_STROKE,
+    arrowTension = 0,
+    selectedAnnotationIndices = [],
+    onAnnotationAdd,
+    onAnnotationsClear: _onAnnotationsClear,
+    onAnnotationRemove,
+    onSelectionChange,
+    onDrawActionStart,
+    onSelectionDragStart,
+    onSelectedAnnotationsMove,
+    onAnnotationUpdate,
+    onClearSelection,
+  },
+  ref
+) {
+  const stageRef = useRef<{ toDataURL: (opts?: { pixelRatio?: number }) => string } | null>(null);
+  useImperativeHandle(ref, () => ({
+    getDataURL: (options) => stageRef.current?.toDataURL(options),
+  }));
+
   const isDrawingRef = useRef(false);
   const currentPathRef = useRef<number[]>([]);
   const selectionStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -335,6 +345,7 @@ export const Court: React.FC<Props> = ({
   return (
     <div className="court-wrap">
       <Stage
+        ref={stageRef as React.RefObject<React.ComponentRef<typeof Stage>>}
         width={width}
         height={height}
         onMouseDown={handleStageMouseDown as (e: unknown) => void}
@@ -551,4 +562,4 @@ export const Court: React.FC<Props> = ({
       </Stage>
     </div>
   );
-};
+});

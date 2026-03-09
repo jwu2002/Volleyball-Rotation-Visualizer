@@ -15,6 +15,7 @@
     "@mui/material": "^7.3.5",
     "firebase": "^12.5.0",
     "konva": "^10.0.8",
+    "pdf-lib": "^1.17.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-konva": "^19.2.0",

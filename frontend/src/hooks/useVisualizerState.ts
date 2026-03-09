@@ -96,6 +96,12 @@ export function useVisualizerState(
   const [drawPopoverOpen, setDrawPopoverOpen] = useState(false);
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [lineupExplorerOpen, setLineupExplorerOpen] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportRotations, setExportRotations] = useState<boolean[]>([true, true, true, true, true, true]);
+  const [exportLineupId, setExportLineupId] = useState<string | null>(null);
+  const [exportConfigId, setExportConfigId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [drawTool, setDrawTool] = useState<"select" | "pencil" | "arrow" | "eraser">("select");
   const [pencilColor, setPencilColor] = useState("#1a1a1a");
   const [arrowColor, setArrowColor] = useState("#1a1a1a");
@@ -514,15 +520,14 @@ export function useVisualizerState(
       return;
     }
     const id = customConfigKey.split("custom:")[1];
-    const configName = customConfigs.find((c) => c.id === id)?.name ?? "this configuration";
     const currentUser = auth.currentUser;
     if (!currentUser) {
       showToast("Not signed in.", "info");
       return;
     }
     showConfirm(
-      "Overwrite configuration",
-      `The rotation(s) you selected will be overwritten in "${configName}". This cannot be undone.`,
+      "Save configuration",
+      "Save changes to (current custom config)?",
       async () => {
         try {
           const payload = {
@@ -639,6 +644,19 @@ export function useVisualizerState(
     }
   }, [savedLineups]);
 
+  const handleSaveLineupAsClick = useCallback(() => {
+    if (!user) {
+      showToast("Sign in to save lineups.", "info");
+      return;
+    }
+    if (user.isAnonymous) {
+      showToast("Sign in with an account (not guest) to save lineups.", "info");
+      return;
+    }
+    setSaveLineupName("");
+    setShowSaveLineupModal(true);
+  }, [user, showToast]);
+
   const handleSaveLineupClick = useCallback(() => {
     if (!user) {
       showToast("Sign in to save lineups.", "info");
@@ -648,11 +666,26 @@ export function useVisualizerState(
       showToast("Sign in with an account (not guest) to save lineups.", "info");
       return;
     }
-    setSaveLineupName(
-      selectedLineupId ? savedLineups.find((l) => l.id === selectedLineupId)?.name ?? "" : ""
-    );
-    setShowSaveLineupModal(true);
-  }, [user, selectedLineupId, savedLineups, showToast]);
+    if (!selectedLineupId) {
+      showToast("Select a lineup to save.", "info");
+      return;
+    }
+    const item = savedLineups.find((l) => l.id === selectedLineupId);
+    const name = item?.name ?? "this lineup";
+    showConfirm("Save lineup", `Save changes to ${name}?`, async () => {
+      const u = auth.currentUser;
+      if (!u) return;
+      try {
+        const token = await u.getIdToken(true);
+        await updateLineup(u.uid, selectedLineupId!, item!.name, lineup, lineupShowNumber, lineupShowName, token);
+        await fetchSavedLineups();
+        showToast("Lineup saved.", "success");
+      } catch (err) {
+        console.error("Save lineup error:", err);
+        showToast(err instanceof Error ? err.message : "Failed to save lineup.", "error");
+      }
+    });
+  }, [user, selectedLineupId, savedLineups, lineup, lineupShowNumber, lineupShowName, fetchSavedLineups, showToast, showConfirm]);
 
   const handleSaveLineupSubmit = useCallback(async () => {
     const u = auth.currentUser;
@@ -660,21 +693,18 @@ export function useVisualizerState(
     const name = sanitizeName(saveLineupName.trim() || "Unnamed lineup");
     try {
       const token = await u.getIdToken(true);
-      if (selectedLineupId) {
-        await updateLineup(u.uid, selectedLineupId, name, lineup, lineupShowNumber, lineupShowName, token);
-      } else {
-        const saved = await saveLineupToStorage(u.uid, name, lineup, lineupShowNumber, lineupShowName, token);
-        setSelectedLineupId(saved.id);
-      }
+      const saved = await saveLineupToStorage(u.uid, name, lineup, lineupShowNumber, lineupShowName, token);
+      setSelectedLineupId(saved.id);
       await fetchSavedLineups();
       setShowSaveLineupModal(false);
       setSaveLineupName("");
+      showToast("Lineup saved.", "success");
     } catch (err) {
       console.error("Save lineup error:", err);
       const msg = err instanceof Error ? err.message : "Failed to save lineup.";
       showToast(msg, "error");
     }
-  }, [user, saveLineupName, selectedLineupId, lineup, lineupShowNumber, lineupShowName, fetchSavedLineups, showToast]);
+  }, [user, saveLineupName, lineup, lineupShowNumber, lineupShowName, fetchSavedLineups, showToast]);
 
   const handleDeleteLineup = useCallback(
     (id: string) => {
@@ -849,6 +879,7 @@ export function useVisualizerState(
     serveReceive,
     setServeReceive,
     rotation,
+    rotationData,
     system,
     customConfigKey,
     currentConfigDisplayName,
@@ -873,6 +904,7 @@ export function useVisualizerState(
     savedLineups,
     selectedLineupId,
     handleSelectLineup: handleSelectLineupResolved,
+    handleSaveLineupAsClick,
     handleSaveLineupClick,
     handleDeleteLineup,
     handleDeleteConfig,
@@ -910,6 +942,18 @@ export function useVisualizerState(
     setShowSavePlanModal,
     lineupExplorerOpen,
     setLineupExplorerOpen,
+    showExportModal,
+    setShowExportModal,
+    exportRotations,
+    setExportRotations,
+    exportLineupId,
+    setExportLineupId,
+    exportConfigId,
+    setExportConfigId,
+    exporting,
+    setExporting,
+    previewPdfUrl,
+    setPreviewPdfUrl,
     drawMode,
     setDrawMode,
     drawPopoverOpen,

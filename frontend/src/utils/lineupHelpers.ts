@@ -35,3 +35,24 @@ export function getDisplayLabel(
   if (showName && initial !== "") return initial;
   return defaultLabel;
 }
+
+/** Cell label for rotation table PDF: no name/no number → role (S1); number only → "OH1 (14)"; name only → "EC"; both → "EC (14)". */
+export function getRotationTableLabel(
+  playerId: string,
+  lineup: Lineup,
+  roleLabel: string
+): string {
+  const key = playerIdToLineupKey(playerId) as LineupPositionId;
+  const entry = lineup[key];
+  if (!entry) return roleLabel;
+  const num = entry.number.trim();
+  const first = (entry.firstName.trim()[0] ?? "").toUpperCase();
+  const last = (entry.lastName.trim()[0] ?? "").toUpperCase();
+  const initial = first || last ? first + last : "";
+  const hasNumber = num !== "";
+  const hasName = initial !== "";
+  if (!hasName && !hasNumber) return roleLabel;
+  if (!hasName && hasNumber) return `${roleLabel} (${num})`;
+  if (hasName && !hasNumber) return initial;
+  return `${initial} (${num})`;
+}
