@@ -24,16 +24,18 @@ if database_url.startswith("postgresql://") and "+asyncpg" not in database_url:
     database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 use_ssl = "sslmode=require" in database_url.lower()
-# Railway: use SSL for all Railway DB URLs (asyncpg default context works better than custom)
-if "rlwy.net" in database_url or "railway.internal" in database_url:
+# Railway: private (railway.internal) = no SSL; public (*.rlwy.net) = SSL
+if "railway.internal" in database_url:
+    use_ssl = False
+elif "rlwy.net" in database_url:
     use_ssl = True
 database_url = re.sub(r"[?&]sslmode=[^&]+", "", database_url, flags=re.IGNORECASE)
 database_url = re.sub(r"\?&", "?", database_url).rstrip("?")
 
 connect_args = {}
 if use_ssl:
-    is_railway = "rlwy.net" in database_url or "railway" in database_url
-    if is_railway:
+    is_railway_public = "rlwy.net" in database_url
+    if is_railway_public:
         # Railway proxy: use permissive SSL context + direct TLS (no STARTTLS)
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = False
