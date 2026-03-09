@@ -1,5 +1,8 @@
 {
   "rewrites": [
-    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+    {
+      "source": "/((?!assets/|lineups|configs|plans|health).*)",
+      "destination": "/index.html"
+    }
   ]
 }

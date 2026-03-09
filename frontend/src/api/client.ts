@@ -2,7 +2,7 @@
  * Backend API client. All methods require a Firebase ID token.
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const BASE_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
 async function request<T>(
   method: string,
