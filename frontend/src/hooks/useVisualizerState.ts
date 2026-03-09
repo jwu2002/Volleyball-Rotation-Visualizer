@@ -35,7 +35,7 @@ import { loadLineupFromStorage, getDisplayLabel } from "../utils/lineupHelpers";
 type ToastType = "success" | "error" | "info";
 
 export function useVisualizerState(
-  user: { isAnonymous?: boolean; email?: string | null } | null,
+  user: { uid: string; isAnonymous?: boolean; email?: string | null } | null,
   activeView: "court" | "planAhead",
   options?: {
     showToast: (message: string, type?: ToastType) => void;
