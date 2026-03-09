@@ -89,10 +89,6 @@ export type VisualizerViewContext = {
   setSaveLineupName: (v: string) => void;
   setShowSaveLineupModal: (v: boolean) => void;
   handleSaveLineupSubmit: () => void;
-  showSavePlanModal: boolean;
-  savePlanName: string;
-  setSavePlanName: (v: string) => void;
-  setShowSavePlanModal: (v: boolean) => void;
   lineupExplorerOpen: boolean;
   setLineupExplorerOpen: (v: boolean) => void;
   showExportModal: boolean;
@@ -170,7 +166,6 @@ function redoClick(ctx: VisualizerViewContext) {
 
 type Props = { ctx: VisualizerViewContext };
 
-/** Sort 6 players into court order: front row (isFrontRow) left to right, then back row left to right. */
 function playersInCourtOrder<T extends { x: number; isFrontRow?: boolean }>(players: T[]): T[] {
   return [...players].sort((a, b) => {
     const aFront = a.isFrontRow ?? false;
@@ -202,7 +197,6 @@ const POSITION_GROUP_ROW_H = 12;
 const POSITION_GROUP_HEADER_H = 10;
 const POSITION_GROUP_TITLE_H = 10;
 
-/** Draw one position group as a bordered table. (x, y) = bottom-left of table. */
 function drawPositionGroupTable(
   page: import("pdf-lib").PDFPage,
   font: import("pdf-lib").PDFFont,
@@ -257,7 +251,6 @@ function drawPositionGroupTable(
   });
 }
 
-/** Draw all position group tables in a horizontal row. (x, y) = bottom-left of the row. Returns height used. */
 function drawPositionGroupsRow(
   page: import("pdf-lib").PDFPage,
   font: import("pdf-lib").PDFFont,
@@ -278,7 +271,6 @@ function drawPositionGroupsRow(
   return maxH;
 }
 
-/** Draw a 2x3 table with borders and optional cell labels. (x,y) = bottom-left of table. */
 function drawTable(
   page: import("pdf-lib").PDFPage,
   font: import("pdf-lib").PDFFont,
@@ -294,7 +286,6 @@ function drawTable(
   const { x, y, cellW, cellH, labels, fontSize } = opts;
   const w = cellW * 3;
   const h = cellH * 2;
-  // Outer border
   page.drawRectangle({
     x,
     y,
@@ -303,14 +294,12 @@ function drawTable(
     borderWidth: LINE_THICKNESS,
     borderColor: TABLE_BORDER,
   });
-  // Inner horizontal line
   page.drawLine({
     start: { x, y: y + cellH },
     end: { x: x + w, y: y + cellH },
     thickness: LINE_THICKNESS,
     color: TABLE_BORDER,
   });
-  // Inner vertical lines
   page.drawLine({
     start: { x: x + cellW, y },
     end: { x: x + cellW, y: y + h },
@@ -323,7 +312,6 @@ function drawTable(
     thickness: LINE_THICKNESS,
     color: TABLE_BORDER,
   });
-  // Cell text with padding so it doesn't touch borders (y = bottom of table)
   page.setFont(font);
   page.setFontSize(fontSize);
   const padH = 5;
@@ -351,7 +339,6 @@ function scaleToCourt(px: number, py: number, courtX: number, courtY: number): {
   return { x, y };
 }
 
-/** Draw one small court: outline, attack line, annotations, player circles with labels. */
 function drawSmallCourt(
   page: import("pdf-lib").PDFPage,
   font: import("pdf-lib").PDFFont,
@@ -424,7 +411,6 @@ function drawSmallCourt(
   });
 }
 
-/** Build rotation table PDF (one page: title + 6 rotations, one table per rotation; optional position groups + Libs when lineup applied; 6 courts at bottom). */
 async function buildRotationTablePdf(params: {
   configName: string;
   rotationData: { players: { id: string; x: number; y: number; isFrontRow?: boolean }[]; annotations?: SavedAnnotation[] }[];
@@ -594,24 +580,6 @@ export function VisualizerView({ ctx }: Props) {
     },
     [c]
   );
-
-  const handlePreviewSave = useCallback(() => {
-    if (!c.previewPdfUrl) return;
-    const a = document.createElement("a");
-    a.href = c.previewPdfUrl;
-    a.download = "volleyball-rotations.pdf";
-    a.click();
-    URL.revokeObjectURL(c.previewPdfUrl);
-    c.setPreviewPdfUrl(null);
-    c.showToast("PDF saved.", "success");
-  }, [c]);
-
-  const handlePreviewClose = useCallback(() => {
-    if (c.previewPdfUrl) {
-      URL.revokeObjectURL(c.previewPdfUrl);
-      c.setPreviewPdfUrl(null);
-    }
-  }, [c]);
 
   return (
     <>
@@ -861,24 +829,6 @@ export function VisualizerView({ ctx }: Props) {
                               Save
                             </button>
                           </>
-                        )}
-                        {c.activeView === "planAhead" && (
-                          <button
-                            type="button"
-                            className="court-toolbar-dropdown-item"
-                            role="menuitem"
-                            onClick={() => {
-                              c.setFileMenuOpen(false);
-                              if (!c.user) {
-                                c.showToast("Sign in to save plans.", "info");
-                                return;
-                              }
-                              c.setSavePlanName("");
-                              c.setShowSavePlanModal(true);
-                            }}
-                          >
-                            Save plan…
-                          </button>
                         )}
                         <button
                           type="button"
@@ -1151,24 +1101,6 @@ export function VisualizerView({ ctx }: Props) {
             onExport={handleExportRequest}
             exporting={c.exporting}
           />
-          {c.previewPdfUrl && (
-            <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="export-preview-title">
-              <div className="modal-panel export-preview-modal">
-                <h2 id="export-preview-title" className="modal-title">PDF Preview</h2>
-                <div className="export-preview-iframe-wrap">
-                  <iframe title="PDF preview" src={c.previewPdfUrl} />
-                </div>
-                <div className="modal-actions">
-                  <button type="button" className="btn btn-success" onClick={handlePreviewSave}>
-                    Save PDF
-                  </button>
-                  <button type="button" className="btn btn-secondary" onClick={handlePreviewClose}>
-                    Don&apos;t save
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
           {c.showOutOfRotation && (
             <div
               className="out-of-rotation-overlay"

@@ -1,10 +1,12 @@
 import React from "react";
-import { Stage, Layer, Rect, Line } from "react-konva";
+import { Stage, Layer, Rect, Line, Arrow } from "react-konva";
 import { PlayerCircle } from "./PlayerCircle";
 
-const HALF_WIDTH = 500;
-const HALF_HEIGHT = 600;
-const TOTAL_HEIGHT = 1200;
+import { COURT_WIDTH, COURT_HEIGHT } from "../constants";
+
+const HALF_WIDTH = COURT_WIDTH;
+const HALF_HEIGHT = COURT_HEIGHT;
+const TOTAL_HEIGHT = HALF_HEIGHT * 2;
 const CENTER_LINE_Y = HALF_HEIGHT;
 const DIST_10FT_FROM_CENTER = 200;
 const TOP_ATTACK_Y = CENTER_LINE_Y - DIST_10FT_FROM_CENTER;
@@ -17,7 +19,25 @@ const TEAM_B_CIRCLE_COLOR = "#2563eb";
 
 const BOTTOM_COURT_UP_OFFSET = 45;
 
-const DEFAULT_COURT_SCALE = 0.72;
+const ANNOTATION_STROKE = "#1a1a1a";
+const ANNOTATION_STROKE_WIDTH = 3;
+
+type SavedAnnotation = {
+  type: "path" | "arrow";
+  points: number[];
+  stroke?: string;
+  pointerAtBeginning?: boolean;
+  pointerAtEnding?: boolean;
+  tension?: number;
+};
+
+function transformAnnotationToBottomCourt(ann: SavedAnnotation): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < ann.points.length; i += 2) {
+    out.push(ann.points[i], CENTER_LINE_Y + ann.points[i + 1] - BOTTOM_COURT_UP_OFFSET);
+  }
+  return out;
+}
 
 export type PlanAheadPlayer = {
   id: string;
@@ -32,6 +52,7 @@ export type PlanAheadPlayer = {
 type Props = {
   playersA: PlanAheadPlayer[];
   playersB: PlanAheadPlayer[];
+  annotationsA?: SavedAnnotation[];
   isLocked?: boolean;
   onDragEndA?: (id: string, x: number, y: number) => void;
   onDragEndB?: (id: string, x: number, y: number) => void;
@@ -42,10 +63,11 @@ type Props = {
 export const PlanAheadCourt: React.FC<Props> = ({
   playersA,
   playersB,
+  annotationsA = [],
   isLocked = true,
   onDragEndA,
   onDragEndB,
-  displayScale = DEFAULT_COURT_SCALE,
+  displayScale = 1,
   rotationLabel,
 }) => {
   const handleDragEndTop = (id: string, stageX: number, stageY: number) => {
@@ -136,6 +158,39 @@ export const PlanAheadCourt: React.FC<Props> = ({
             />
           ))}
         </Layer>
+        {annotationsA.length > 0 && (
+          <Layer listening={false}>
+            {annotationsA.map((ann, i) => {
+              const stroke = ann.stroke ?? ANNOTATION_STROKE;
+              const tension = ann.tension ?? 0;
+              const points = transformAnnotationToBottomCourt(ann);
+              if (points.length < 4) return null;
+              return ann.type === "arrow" ? (
+                <Arrow
+                  key={i}
+                  points={points}
+                  stroke={stroke}
+                  strokeWidth={ANNOTATION_STROKE_WIDTH}
+                  pointerLength={12}
+                  pointerWidth={12}
+                  fill={stroke}
+                  tension={tension}
+                  pointerAtBeginning={ann.pointerAtBeginning ?? false}
+                  pointerAtEnding={ann.pointerAtEnding ?? true}
+                />
+              ) : (
+                <Line
+                  key={i}
+                  points={points}
+                  stroke={stroke}
+                  strokeWidth={ANNOTATION_STROKE_WIDTH}
+                  lineCap="round"
+                  lineJoin="round"
+                />
+              );
+            })}
+          </Layer>
+        )}
       </Stage>
         </div>
       </div>

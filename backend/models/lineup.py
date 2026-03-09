@@ -16,7 +16,7 @@ class Lineup(Base):
     )
     user_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
-    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)  # Lineup dict
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
     show_number: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     show_name: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(

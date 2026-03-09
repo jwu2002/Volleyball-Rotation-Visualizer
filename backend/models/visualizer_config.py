@@ -16,8 +16,8 @@ class VisualizerConfig(Base):
     )
     user_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
-    system: Mapped[str] = mapped_column(Text, nullable=False)  # '5-1' | '6-2'
-    rotations: Mapped[list] = mapped_column(JSONB, nullable=False)  # list of { players, annotations }
+    system: Mapped[str] = mapped_column(Text, nullable=False)
+    rotations: Mapped[list] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

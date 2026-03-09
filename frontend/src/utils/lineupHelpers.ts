@@ -36,7 +36,6 @@ export function getDisplayLabel(
   return defaultLabel;
 }
 
-/** Cell label for rotation table PDF: no name/no number → role (S1); number only → "OH1 (14)"; name only → "EC"; both → "EC (14)". */
 export function getRotationTableLabel(
   playerId: string,
   lineup: Lineup,

@@ -8,14 +8,13 @@ from starlette.requests import Request
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import limiter
-from api.routes import configs, lineups, plans
+from api.routes import configs, lineups
 from config import parse_cors_origins, settings
 from db.base import Base
 from db.session import engine
-from models import Lineup, Plan, VisualizerConfig
+from models import Lineup, VisualizerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Volleyball Rotation Visualizer API",
-    description="Backend for saved lineups, visualizer configs, and plans.",
+    description="Backend for saved lineups and visualizer configs.",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -49,14 +48,12 @@ app.add_middleware(SlowAPIMiddleware)
 _origins = ["http://localhost:5173", "http://localhost:3000"]
 if settings.cors_origins:
     _origins.extend(parse_cors_origins(settings.cors_origins))
-# With allow_credentials=True, CORS forbids wildcard for methods/headers; list them explicitly.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
-    expose_headers=[],
 )
 
 
@@ -76,4 +73,3 @@ def health():
 
 app.include_router(lineups.router, prefix="/lineups", tags=["lineups"])
 app.include_router(configs.router, prefix="/configs", tags=["configs"])
-app.include_router(plans.router, prefix="/plans", tags=["plans"])

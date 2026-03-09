@@ -1,3 +1,3 @@
-from api.routes import configs, lineups, plans
+from api.routes import configs, lineups
 
-__all__ = ["lineups", "configs", "plans"]
+__all__ = ["lineups", "configs"]

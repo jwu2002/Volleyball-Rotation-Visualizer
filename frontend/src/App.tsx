@@ -1,16 +1,12 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import type { Annotation } from "./components/Court";
+import { useState, useMemo, useCallback } from "react";
 import { PlanAhead } from "./components/PlanAhead";
 import { VisualizerView } from "./components/VisualizerView";
 import type { Lineup } from "./components/StartingLineup";
-import { SaveConfigModal, SaveLineupModal, SavePlanModal, LineupExplorerModal, LiberoModal, Toast, ConfirmModal } from "./components/Modals";
+import { SaveConfigModal, SaveLineupModal, LineupExplorerModal, LiberoModal, Toast, ConfirmModal } from "./components/Modals";
 import type { ToastType } from "./components/Modals";
 import "./App.css";
 import "./styles/Modals.css";
-import { auth } from "./firebaseConfig";
 import { default51Rotations, default62Rotations } from "./data/defaultRotations";
-import type { SavedPlan } from "./types/savedConfig";
-import { fetchSavedPlans, savePlan } from "./storage/configStorage";
 import { getRotationSet, applyLiberoToBackRowMiddle } from "./utils/visualizerRotations";
 import { getDisplayLabel } from "./utils/lineupHelpers";
 import { AppHeader } from "./components/AppHeader";
@@ -68,9 +64,8 @@ function App() {
   const [planAheadLineupB, setPlanAheadLineupB] = useState<Lineup>({});
   const [planAheadRotationA, setPlanAheadRotationA] = useState(1);
   const [planAheadRotationB, setPlanAheadRotationB] = useState(1);
-  const [planAheadAnnotations, setPlanAheadAnnotations] = useState<Annotation[]>([]);
-  const [savedPlans, setSavedPlans] = useState<SavedPlan[]>([]);
-  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [planAheadLineupIdA, setPlanAheadLineupIdA] = useState<string | null>(null);
+  const [planAheadConfigIdA, setPlanAheadConfigIdA] = useState<string | null>(null);
 
   const getPlayersForRotation = useCallback(
     (sys: "5-1" | "6-2", rot: number, useReceiveFormation: boolean = true) => {
@@ -85,16 +80,48 @@ function App() {
     []
   );
 
+  const customConfigsForPlanAhead = useMemo(
+    () => visualizerViewCtx.customConfigs.filter((c) => c.id).map((c) => ({ id: c.id!, name: c.name })),
+    [visualizerViewCtx.customConfigs]
+  );
+
   const planAheadPlayersARotations = useMemo(() => {
-    const useReceive = planAheadServeTeam !== "A";
+    const teamAIsReceiving = planAheadServeTeam === "B";
+    const useReceiveForA = teamAIsReceiving;
+    const configA =
+      planAheadConfigIdA && teamAIsReceiving
+        ? visualizerViewCtx.customConfigs.find((c) => c.id === planAheadConfigIdA)
+        : null;
+    if (configA?.rotations?.length) {
+      return [1, 2, 3, 4, 5, 6].map((rot) => {
+        const snap = configA.rotations[rot - 1];
+        const players = snap?.players ?? [];
+        return players.map((p: { id: string; x: number; y: number; label: string; color?: string; isFrontRow?: boolean; isLibero?: boolean }) => ({
+          id: p.id,
+          x: p.x,
+          y: p.y,
+          color: p.color ?? "#666",
+          label: getDisplayLabel(p.id, p.label ?? p.id, planAheadLineupA, true, false),
+          isFrontRow: p.isFrontRow,
+          isLibero: p.isLibero,
+        }));
+      });
+    }
     return [1, 2, 3, 4, 5, 6].map((rot) => {
-      const base = getPlayersForRotation(planAheadSystemA, rot, useReceive);
+      const base = getPlayersForRotation(planAheadSystemA, rot, useReceiveForA);
       return base.map((p: { id: string; label: string; [k: string]: unknown }) => ({
         ...p,
         label: getDisplayLabel(p.id, p.label, planAheadLineupA, true, false),
       }));
     });
-  }, [getPlayersForRotation, planAheadSystemA, planAheadLineupA, planAheadServeTeam]);
+  }, [
+    planAheadServeTeam,
+    planAheadConfigIdA,
+    visualizerViewCtx.customConfigs,
+    planAheadLineupA,
+    planAheadSystemA,
+    getPlayersForRotation,
+  ]);
 
   const planAheadPlayersBRotations = useMemo(() => {
     const useReceive = planAheadServeTeam !== "B";
@@ -105,85 +132,47 @@ function App() {
         label: getDisplayLabel(p.id, p.label, planAheadLineupB, true, false),
       }));
     });
-  }, [getPlayersForRotation, planAheadSystemB, planAheadLineupB, planAheadServeTeam]);
+  }, [planAheadServeTeam, planAheadLineupB, planAheadSystemB, getPlayersForRotation]);
 
-  const fetchSavedPlansForPlanAhead = useCallback(async () => {
-    const u = auth.currentUser;
-    if (!u) {
-      setSavedPlans([]);
-      return;
-    }
-    try {
-      const token = await u.getIdToken(true);
-      const list = await fetchSavedPlans(token);
-      setSavedPlans(list);
-    } catch {
-      setSavedPlans([]);
-    }
-  }, []);
+  const planAheadAnnotationsA = useMemo(() => {
+    if (planAheadServeTeam !== "B" || !planAheadConfigIdA) return [];
+    const config = visualizerViewCtx.customConfigs.find((c) => c.id === planAheadConfigIdA);
+    const snap = config?.rotations?.[planAheadRotationA - 1];
+    return Array.isArray(snap?.annotations) ? snap.annotations : [];
+  }, [planAheadServeTeam, planAheadConfigIdA, planAheadRotationA, visualizerViewCtx.customConfigs]);
 
-  const userKey = user ? `${user.uid}-${user.isAnonymous}-${user.email ?? ""}` : "";
-  useEffect(() => {
-    fetchSavedPlansForPlanAhead();
-  }, [userKey, fetchSavedPlansForPlanAhead]);
+  const handlePlanAheadLineupASelect = useCallback(
+    (lineupId: string | null) => {
+      setPlanAheadLineupIdA(lineupId);
+      if (!lineupId) {
+        setPlanAheadLineupA({});
+        return;
+      }
+      const item = visualizerViewCtx.savedLineups.find((l) => l.id === lineupId);
+      if (item?.lineup) setPlanAheadLineupA(item.lineup as Lineup);
+    },
+    [visualizerViewCtx.savedLineups]
+  );
 
-  const handleSavePlanSubmit = useCallback(async () => {
-    const u = auth.currentUser;
-    if (!u) {
-      showToast("Sign in to save plans.", "info");
-      return;
-    }
-    const name = (visualizerViewCtx.savePlanName || "Unnamed plan").trim();
-    try {
-      const payload = {
-        lineupA: planAheadLineupA,
-        lineupB: planAheadLineupB,
-        systemA: planAheadSystemA,
-        systemB: planAheadSystemB,
-        serveTeam: planAheadServeTeam,
-        rotationA: planAheadRotationA,
-        rotationB: planAheadRotationB,
-        annotations: JSON.parse(JSON.stringify(planAheadAnnotations)) as Annotation[],
-      };
-      const token = await u.getIdToken(true);
-      await savePlan(u.uid, name, payload, token);
-      visualizerViewCtx.setShowSavePlanModal(false);
-      visualizerViewCtx.setSavePlanName("");
-      await fetchSavedPlansForPlanAhead();
-      showToast("Plan saved.", "success");
-    } catch (err) {
-      console.error("Error saving plan:", err);
-      showToast("Failed to save plan.", "error");
-    }
-  }, [
-    showToast,
-    visualizerViewCtx.savePlanName,
-    planAheadLineupA,
-    planAheadLineupB,
-    planAheadSystemA,
-    planAheadSystemB,
-    planAheadServeTeam,
-    planAheadRotationA,
-    planAheadRotationB,
-    planAheadAnnotations,
-    fetchSavedPlansForPlanAhead,
-  ]);
+  const handlePdfPreviewSave = useCallback(() => {
+    const url = visualizerViewCtx.previewPdfUrl;
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "volleyball-rotations.pdf";
+    a.click();
+    URL.revokeObjectURL(url);
+    visualizerViewCtx.setPreviewPdfUrl(null);
+    showToast("PDF saved.", "success");
+  }, [visualizerViewCtx.previewPdfUrl, visualizerViewCtx.setPreviewPdfUrl, showToast]);
 
-  const handleLoadPlan = useCallback((plan: SavedPlan | null) => {
-    if (!plan) {
-      setSelectedPlanId(null);
-      return;
+  const handlePdfPreviewClose = useCallback(() => {
+    const url = visualizerViewCtx.previewPdfUrl;
+    if (url) {
+      URL.revokeObjectURL(url);
+      visualizerViewCtx.setPreviewPdfUrl(null);
     }
-    setPlanAheadLineupA(plan.lineupA ?? {});
-    setPlanAheadLineupB(plan.lineupB ?? {});
-    setPlanAheadSystemA(plan.systemA);
-    setPlanAheadSystemB(plan.systemB);
-    setPlanAheadServeTeam(plan.serveTeam);
-    setPlanAheadRotationA(plan.rotationA);
-    setPlanAheadRotationB(plan.rotationB);
-    setPlanAheadAnnotations(Array.isArray(plan.annotations) ? JSON.parse(JSON.stringify(plan.annotations)) : []);
-    setSelectedPlanId(plan.id ?? null);
-  }, []);
+  }, [visualizerViewCtx.previewPdfUrl, visualizerViewCtx.setPreviewPdfUrl]);
 
   const ctx = visualizerViewCtx;
 
@@ -260,12 +249,35 @@ function App() {
               onLineupBChange={(pos, entry) => setPlanAheadLineupB((prev) => ({ ...prev, [pos]: entry }))}
               playersARotations={planAheadPlayersARotations}
               playersBRotations={planAheadPlayersBRotations}
-              savedPlans={savedPlans}
-              selectedPlanId={selectedPlanId}
-              onLoadPlan={handleLoadPlan}
+              annotationsA={planAheadAnnotationsA}
+              savedLineups={visualizerViewCtx.savedLineups}
+              planAheadLineupIdA={planAheadLineupIdA}
+              onPlanAheadLineupASelect={handlePlanAheadLineupASelect}
+              customConfigs={customConfigsForPlanAhead}
+              planAheadConfigIdA={planAheadConfigIdA}
+              onPlanAheadConfigIdAChange={setPlanAheadConfigIdA}
             />
           </div>
         </div>
+
+        {ctx.previewPdfUrl && (
+          <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="export-preview-title">
+            <div className="modal-panel export-preview-modal">
+              <h2 id="export-preview-title" className="modal-title">PDF Preview</h2>
+              <div className="export-preview-iframe-wrap">
+                <iframe title="PDF preview" src={ctx.previewPdfUrl} />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-success" onClick={handlePdfPreviewSave}>
+                  Save PDF
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={handlePdfPreviewClose}>
+                  Don&apos;t save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <SaveConfigModal
           open={ctx.showSaveModal}
@@ -293,16 +305,6 @@ function App() {
           onClose={() => {
             ctx.setShowSaveLineupModal(false);
             ctx.setSaveLineupName("");
-          }}
-        />
-        <SavePlanModal
-          open={ctx.showSavePlanModal}
-          name={ctx.savePlanName}
-          onNameChange={ctx.setSavePlanName}
-          onSave={handleSavePlanSubmit}
-          onClose={() => {
-            ctx.setShowSavePlanModal(false);
-            ctx.setSavePlanName("");
           }}
         />
         <LineupExplorerModal

@@ -1,9 +1,14 @@
-import React from "react";
+import React, { useState, useRef, useLayoutEffect } from "react";
 import "../styles/PlanAhead.css";
 import { PlanAheadCourt, type PlanAheadPlayer } from "./PlanAheadCourt";
 import { LINEUP_POSITIONS, type Lineup, type LineupEntry, type LineupPositionId } from "./StartingLineup";
 import { COLORS } from "../data/defaultRotations";
-import type { SavedPlan } from "../types/savedConfig";
+import { COURT_WIDTH } from "../constants";
+
+const PLAN_AHEAD_COURT_WIDTH = COURT_WIDTH;
+
+export type SavedLineupItem = { id: string; name: string; lineup: unknown };
+export type SavedConfigItem = { id: string; name: string };
 
 export type PlanAheadProps = {
   serveTeam: "A" | "B";
@@ -22,9 +27,13 @@ export type PlanAheadProps = {
   onLineupBChange: (position: LineupPositionId, entry: LineupEntry) => void;
   playersARotations: PlanAheadPlayer[][];
   playersBRotations: PlanAheadPlayer[][];
-  savedPlans?: SavedPlan[];
-  selectedPlanId?: string | null;
-  onLoadPlan?: (plan: SavedPlan | null) => void;
+  annotationsA?: { type: "path" | "arrow"; points: number[]; stroke?: string; pointerAtBeginning?: boolean; pointerAtEnding?: boolean; tension?: number }[];
+  savedLineups?: SavedLineupItem[];
+  planAheadLineupIdA?: string | null;
+  onPlanAheadLineupASelect?: (id: string | null) => void;
+  customConfigs?: SavedConfigItem[];
+  planAheadConfigIdA?: string | null;
+  onPlanAheadConfigIdAChange?: (id: string | null) => void;
 };
 
 const TEAM_A_COLOR = "#dc2626";
@@ -63,39 +72,35 @@ export const PlanAhead: React.FC<PlanAheadProps> = ({
   onLineupBChange,
   playersARotations,
   playersBRotations,
-  savedPlans = [],
-  selectedPlanId = null,
-  onLoadPlan,
+  annotationsA = [],
+  savedLineups = [],
+  planAheadLineupIdA = null,
+  onPlanAheadLineupASelect,
+  customConfigs = [],
+  planAheadConfigIdA = null,
+  onPlanAheadConfigIdAChange,
 }) => {
+  const courtWrapRef = useRef<HTMLDivElement>(null);
+  const [courtScale, setCourtScale] = useState(1);
+
+  useLayoutEffect(() => {
+    const el = courtWrapRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.clientWidth;
+      if (w <= 0) return;
+      const scale = Math.min(w / PLAN_AHEAD_COURT_WIDTH, 1);
+      setCourtScale(scale);
+    };
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    update();
+    return () => ro.disconnect();
+  }, []);
+
   return (
     <div className="plan-ahead">
       <div className="plan-ahead-top">
-        {savedPlans.length > 0 && onLoadPlan && (
-          <div className="plan-ahead-control-group">
-            <span className="plan-ahead-label">Plan</span>
-            <select
-              className="plan-ahead-select"
-              value={selectedPlanId ?? ""}
-              onChange={(e) => {
-                const id = e.target.value;
-                if (!id) {
-                  onLoadPlan?.(null);
-                  return;
-                }
-                const plan = savedPlans.find((p) => p.id === id);
-                if (plan) onLoadPlan(plan);
-              }}
-              aria-label="Load plan"
-            >
-              <option value="">Current</option>
-              {savedPlans.map((p) => (
-                <option key={p.id} value={p.id ?? ""}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
         <div className="plan-ahead-serve-toggle">
           <span className="plan-ahead-label">Serve</span>
           <button
@@ -160,8 +165,31 @@ export const PlanAhead: React.FC<PlanAheadProps> = ({
       </div>
 
       <div className="plan-ahead-main">
-        <div className="plan-ahead-table-panel">
-          <table className="plan-ahead-compact-table" aria-label="Lineups by number">
+        <div className="plan-ahead-left-panel">
+          {onPlanAheadLineupASelect && (
+            <div className="plan-ahead-lineup-select-row">
+              <label className="plan-ahead-label" htmlFor="plan-ahead-lineup-a">Lineup (Team A)</label>
+              <select
+                id="plan-ahead-lineup-a"
+                className="plan-ahead-select"
+                value={planAheadLineupIdA ?? ""}
+                onChange={(e) => onPlanAheadLineupASelect(e.target.value || null)}
+                aria-label="Load lineup for Team A"
+              >
+                <option value="">None</option>
+                {savedLineups.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
+              {savedLineups.length === 0 && (
+                <span className="plan-ahead-label plan-ahead-hint">Sign in to save and load lineups.</span>
+              )}
+            </div>
+          )}
+          <div className="plan-ahead-table-panel">
+            <table className="plan-ahead-compact-table" aria-label="Lineups by number">
             <thead>
               <tr className="plan-ahead-compact-table-team-row">
                 <th scope="col" className="plan-ahead-pos-header" />
@@ -210,88 +238,73 @@ export const PlanAhead: React.FC<PlanAheadProps> = ({
               })}
             </tbody>
           </table>
+          </div>
+          {onPlanAheadConfigIdAChange && (
+            <div className="plan-ahead-config-select-row">
+              <label className="plan-ahead-label" htmlFor="plan-ahead-config-a">Configuration (Team A)</label>
+              <select
+                id="plan-ahead-config-a"
+                className="plan-ahead-select"
+                value={planAheadConfigIdA ?? ""}
+                onChange={(e) => onPlanAheadConfigIdAChange(e.target.value || null)}
+                aria-label="Configuration for Team A"
+              >
+                <option value="">Current</option>
+                {customConfigs.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              {customConfigs.length === 0 && (
+                <span className="plan-ahead-label plan-ahead-hint">Sign in to save and load configs.</span>
+              )}
+            </div>
+          )}
         </div>
         <div className="plan-ahead-court-row">
           <div className="plan-ahead-court-with-rotations">
-            <div className="plan-ahead-court-wrapper">
-              <PlanAheadCourt
-                playersA={playersARotations[rotationA - 1]}
-                playersB={playersBRotations[rotationB - 1]}
-                isLocked={true}
-                rotationLabel={`Team A (US) R${rotationA} · Team B R${rotationB}`}
-              />
+            <div className="plan-ahead-rotation-buttons-row">
+              <div className="plan-ahead-control-group">
+                <span className="plan-ahead-label">Team A (US)</span>
+                {[1, 2, 3, 4, 5, 6].map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    className={`btn-rotation ${rotationA === r ? "active" : ""}`}
+                    onClick={() => onRotationAChange(r)}
+                    aria-label={`Team A rotation ${r}`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <div className="plan-ahead-control-group">
+                <span className="plan-ahead-label">Team B</span>
+                {[1, 2, 3, 4, 5, 6].map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    className={`btn-rotation ${rotationB === r ? "active" : ""}`}
+                    onClick={() => onRotationBChange(r)}
+                    aria-label={`Team B rotation ${r}`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="plan-ahead-court-rotation-sidebar">
-              <div className="plan-ahead-court-rotation-block plan-ahead-court-rotation-top">
-                <span className="plan-ahead-label">Team B Rotation</span>
-                <div className="plan-ahead-rotation-control">
-                  <select
-                    className="plan-ahead-select"
-                    value={rotationB}
-                    onChange={(e) => onRotationBChange(Number(e.target.value))}
-                    aria-label="Team B Rotation"
-                  >
-                    {[1, 2, 3, 4, 5, 6].map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="plan-ahead-rot-btn"
-                    onClick={() => onRotationBChange(rotationB === 6 ? 1 : rotationB + 1)}
-                    aria-label="Team B Rotation plus 1"
-                    title="Next rotation"
-                  >
-                    +1
-                  </button>
-                  <button
-                    type="button"
-                    className="plan-ahead-rot-btn"
-                    onClick={() => onRotationBChange(rotationB === 1 ? 6 : rotationB - 1)}
-                    aria-label="Team B Rotation minus 1"
-                    title="Previous rotation"
-                  >
-                    −1
-                  </button>
-                </div>
-              </div>
-              <div className="plan-ahead-court-rotation-block plan-ahead-court-rotation-bottom">
-                <span className="plan-ahead-label">Team A (US) Rotation</span>
-                <div className="plan-ahead-rotation-control">
-                  <select
-                    className="plan-ahead-select"
-                    value={rotationA}
-                    onChange={(e) => onRotationAChange(Number(e.target.value))}
-                    aria-label="Team A (US) Rotation"
-                  >
-                    {[1, 2, 3, 4, 5, 6].map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="plan-ahead-rot-btn"
-                    onClick={() => onRotationAChange(rotationA === 6 ? 1 : rotationA + 1)}
-                    aria-label="Team A (US) Rotation plus 1"
-                    title="Next rotation"
-                  >
-                    +1
-                  </button>
-                  <button
-                    type="button"
-                    className="plan-ahead-rot-btn"
-                    onClick={() => onRotationAChange(rotationA === 1 ? 6 : rotationA - 1)}
-                    aria-label="Team A (US) Rotation minus 1"
-                    title="Previous rotation"
-                  >
-                    −1
-                  </button>
-                </div>
-              </div>
+            <div className="plan-ahead-court-label-row">
+              Team A (US) R{rotationA} · Team B R{rotationB}
+            </div>
+            <div ref={courtWrapRef} className="plan-ahead-court-wrapper plan-ahead-court-fit">
+              <PlanAheadCourt
+                playersA={playersARotations[rotationA - 1] ?? []}
+                playersB={playersBRotations[rotationB - 1] ?? []}
+                annotationsA={annotationsA}
+                isLocked={true}
+                displayScale={courtScale}
+              />
             </div>
           </div>
         </div>

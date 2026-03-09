@@ -5,18 +5,19 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /** Prevent layout from breaking in small windows; content scrolls where needed. */
+  min-width: 0;
 }
 
 .plan-ahead-top {
   flex-shrink: 0;
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px 12px;
   padding-bottom: 6px;
   margin-bottom: 6px;
   border-bottom: 1px solid var(--border);
-  overflow-x: auto;
   min-height: 28px;
 }
 
@@ -101,20 +102,58 @@
 .plan-ahead-main {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: row;
   gap: 16px;
   overflow: hidden;
 }
 
-.plan-ahead-table-panel {
+.plan-ahead-left-panel {
   flex-shrink: 0;
-  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  width: 280px;
+}
+
+.plan-ahead-lineup-select-row,
+.plan-ahead-config-select-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plan-ahead-lineup-select-row .plan-ahead-select,
+.plan-ahead-config-select-row .plan-ahead-select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.plan-ahead-hint {
+  font-size: 0.65rem;
+  font-style: italic;
+  margin-top: 2px;
+}
+
+.plan-ahead-table-panel {
+  flex: 0 0 auto;
   overflow: auto;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 10px 12px;
+}
+
+@media (max-width: 700px) {
+  .plan-ahead-main {
+    flex-direction: column;
+  }
+
+  .plan-ahead-left-panel {
+    width: auto;
+  }
 }
 
 .plan-ahead-compact-table {
@@ -238,10 +277,57 @@
   min-width: 0;
   min-height: 0;
   display: flex;
-  flex-direction: row;
-  align-items: stretch;
+  flex-direction: column;
+  align-items: center;
   gap: 10px;
   padding: 10px;
+}
+
+.plan-ahead-rotation-buttons-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  flex-shrink: 0;
+}
+
+.plan-ahead-rotation-buttons-row .plan-ahead-control-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.plan-ahead-rotation-buttons-row .btn-rotation {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.plan-ahead-rotation-buttons-row .btn-rotation:hover {
+  background: var(--bg-elevated);
+  border-color: var(--text-muted);
+}
+
+.plan-ahead-rotation-buttons-row .btn-rotation.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.plan-ahead-court-label-row {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  line-height: 1.2;
+  padding: 2px 0;
 }
 
 .plan-ahead-court-wrapper {
@@ -253,24 +339,13 @@
   justify-content: center;
 }
 
-.plan-ahead-court-rotation-sidebar {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+.plan-ahead-court-wrapper.plan-ahead-court-fit {
+  overflow-x: hidden;
+  overflow-y: auto;
+  align-self: stretch;
   align-items: flex-start;
-  flex-shrink: 0;
-  padding: 8px 0;
-}
-
-.plan-ahead-court-rotation-block {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-
-.plan-ahead-court-rotation-block .plan-ahead-label {
-  font-size: 0.6875rem;
+  justify-content: flex-start;
+  padding-top: 4px;
 }
 
 .plan-ahead-courts-row {

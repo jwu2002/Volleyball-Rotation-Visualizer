@@ -151,34 +151,6 @@ export function SaveLineupModal(props: {
   );
 }
 
-export function SavePlanModal(props: {
-  open: boolean;
-  name: string;
-  onNameChange: (v: string) => void;
-  onSave: () => void;
-  onClose: () => void;
-}) {
-  if (!props.open) return null;
-  return (
-    <div className="modal-overlay">
-      <div className="modal-panel">
-        <h3 className="modal-title">Save plan</h3>
-        <input
-          type="text"
-          placeholder="Plan name"
-          value={props.name}
-          onChange={(e) => props.onNameChange(e.target.value)}
-          maxLength={MAX_NAME_LENGTH}
-        />
-        <div className="modal-actions">
-          <button type="button" className="btn btn-success" onClick={props.onSave}>Save</button>
-          <button type="button" className="btn btn-secondary" onClick={props.onClose}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function getRotationPreviewLabel(
   customConfigKey: string,
   customConfigs: SavedVisualizerConfig[]

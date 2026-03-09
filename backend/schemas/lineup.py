@@ -9,14 +9,12 @@ MAX_LINEUP_NAME_LENGTH = 200
 
 
 def _sanitize_name(v: str, max_len: int = MAX_LINEUP_NAME_LENGTH) -> str:
-    """Strip and limit length. Remove control characters."""
     if not isinstance(v, str):
         return v
     s = re.sub(r"[\x00-\x1f\x7f]", "", v.strip())
     return s[:max_len] if len(s) > max_len else s
 
 
-# Payload is the Lineup object: { [position]: { firstName, lastName, number } }
 class LineupCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=MAX_LINEUP_NAME_LENGTH)
     lineup: dict = Field(..., validation_alias="lineup")
@@ -52,7 +50,7 @@ class LineupUpdate(BaseModel):
 
 
 class LineupOut(BaseModel):
-    id: str  # UUID as string for frontend
+    id: str
     name: str
     lineup: dict = Field(..., validation_alias="payload", serialization_alias="lineup")
     show_number: bool = Field(..., serialization_alias="showNumber")

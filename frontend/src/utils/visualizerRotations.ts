@@ -208,7 +208,6 @@ export function getPosById(players: Player[]): Record<string, { x: number; y: nu
   return map;
 }
 
-/** Build position map for validation: libero is assigned to the back-row role they're subbing for (the one missing from non-libero). */
 export function getPosByIdForValidation(
   players: Player[],
   basePlayers: Player[]
@@ -263,11 +262,6 @@ export function isValidRotation(players: Player[], system: "5-1" | "6-2", rotati
   return true;
 }
 
-/**
- * Returns a specific, directional error message for the player that was moved and caused
- * an out-of-rotation violation. Only checks constraints for that one player.
- * e.g. "outside 1 must be in front of setter 1" or "right side 2 must be to the left of middle blocker 2 in rotation 1"
- */
 export function getOutOfRotationMessage(
   movedPlayerId: string,
   newPlayers: Player[],

@@ -1,22 +1,15 @@
 import type {
   SavedVisualizerConfig,
   SavedVisualizerConfigPayload,
-  SavedPlan,
-  SavedPlanPayload,
 } from "../types/savedConfig";
 import type { Lineup, SavedLineupItem } from "../components/StartingLineup";
-import { lineupsApi, configsApi, plansApi } from "../api/client";
+import { lineupsApi, configsApi } from "../api/client";
 
 const VISUALIZER_KEY_PREFIX = "vb_visualizer_configs_";
-const PLANS_KEY_PREFIX = "vb_plans_";
 const LINEUPS_KEY_PREFIX = "vb_lineups_";
 
 function getVisualizerKey(userId: string): string {
   return `${VISUALIZER_KEY_PREFIX}${userId}`;
-}
-
-function getPlansKey(userId: string): string {
-  return `${PLANS_KEY_PREFIX}${userId}`;
 }
 
 function getLineupsKey(userId: string): string {
@@ -253,99 +246,5 @@ function normalizeAnnotation(raw: unknown): SavedVisualizerConfig["rotations"][0
     pointerAtBeginning: a.pointerAtBeginning === true,
     pointerAtEnding: a.pointerAtEnding !== false,
     tension: typeof a.tension === "number" ? a.tension : undefined,
-  };
-}
-
-export function getSavedPlans(userId: string): SavedPlan[] {
-  try {
-    const raw = localStorage.getItem(getPlansKey(userId));
-    if (!raw) return [];
-    const arr = JSON.parse(raw) as unknown[];
-    return (Array.isArray(arr) ? arr : []).map(normalizePlan);
-  } catch {
-    return [];
-  }
-}
-
-export async function fetchSavedPlans(token: string): Promise<SavedPlan[]> {
-  const list = await plansApi.list(token);
-  return list.map((o) => normalizePlan({ ...o.payload, name: o.name, id: o.id, createdAt: o.createdAt, updatedAt: o.updatedAt }));
-}
-
-export function savePlan(
-  userId: string,
-  name: string,
-  payload: SavedPlanPayload,
-  token?: string | null
-): SavedPlan | Promise<SavedPlan> {
-  if (token) {
-    return plansApi.create(token, { name, payload }).then((o) => ({
-      ...payload,
-      name: o.name,
-      id: o.id,
-      userId,
-      createdAt: o.createdAt ? new Date(o.createdAt) : undefined,
-      updatedAt: o.updatedAt ? new Date(o.updatedAt) : undefined,
-    }));
-  }
-  const plans = getSavedPlans(userId);
-  const id = `plan_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-  const now = new Date();
-  const plan: SavedPlan = {
-    ...payload,
-    name,
-    id,
-    userId,
-    createdAt: now,
-    updatedAt: now,
-  };
-  plans.push(plan);
-  localStorage.setItem(getPlansKey(userId), JSON.stringify(plans));
-  return plan;
-}
-
-export function updatePlan(
-  userId: string,
-  id: string,
-  payload: SavedPlanPayload,
-  token?: string | null
-): void | Promise<void> {
-  if (token) {
-    return plansApi.update(token, id, { payload }).then(() => {});
-  }
-  const plans = getSavedPlans(userId);
-  const idx = plans.findIndex((p) => p.id === id);
-  if (idx === -1) return;
-  const now = new Date();
-  plans[idx] = {
-    ...payload,
-    name: plans[idx].name,
-    id,
-    userId,
-    createdAt: plans[idx].createdAt ?? now,
-    updatedAt: now,
-  };
-  localStorage.setItem(getPlansKey(userId), JSON.stringify(plans));
-}
-
-function normalizePlan(raw: unknown): SavedPlan {
-  const o = raw as Record<string, unknown>;
-  const lineupA = (o.lineupA && typeof o.lineupA === "object" ? o.lineupA : {}) as SavedPlanPayload["lineupA"];
-  const lineupB = (o.lineupB && typeof o.lineupB === "object" ? o.lineupB : {}) as SavedPlanPayload["lineupB"];
-  const annotations = Array.isArray(o.annotations) ? (o.annotations as unknown[]).map(normalizeAnnotation) : [];
-  return {
-    name: typeof o.name === "string" ? o.name : "Unnamed plan",
-    lineupA,
-    lineupB,
-    systemA: o.systemA === "6-2" ? "6-2" : "5-1",
-    systemB: o.systemB === "6-2" ? "6-2" : "5-1",
-    serveTeam: o.serveTeam === "B" ? "B" : "A",
-    rotationA: typeof o.rotationA === "number" && o.rotationA >= 1 && o.rotationA <= 6 ? o.rotationA : 1,
-    rotationB: typeof o.rotationB === "number" && o.rotationB >= 1 && o.rotationB <= 6 ? o.rotationB : 1,
-    annotations,
-    id: typeof o.id === "string" ? o.id : undefined,
-    userId: typeof o.userId === "string" ? o.userId : undefined,
-    createdAt: o.createdAt ? new Date(o.createdAt as string) : undefined,
-    updatedAt: o.updatedAt ? new Date(o.updatedAt as string) : undefined,
   };
 }

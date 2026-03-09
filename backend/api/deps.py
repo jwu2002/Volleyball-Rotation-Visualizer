@@ -28,7 +28,6 @@ def _get_jwks_client() -> PyJWKClient:
 async def get_current_user_id(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> str:
-    """Verify Firebase ID token and return the user's uid. Raises 401 if missing or invalid."""
     if not credentials or not (credentials.credentials or "").strip():
         logger.warning("401: Missing or invalid authorization header")
         raise HTTPException(
@@ -51,7 +50,7 @@ async def get_current_user_id(
             algorithms=["RS256"],
             audience=settings.firebase_project_id,
             issuer=f"https://securetoken.google.com/{settings.firebase_project_id}",
-            leeway=10,  # seconds: allow clock skew for iat/nbf/exp
+            leeway=10,
         )
         uid = payload.get("user_id") or payload.get("sub")
         if not uid:

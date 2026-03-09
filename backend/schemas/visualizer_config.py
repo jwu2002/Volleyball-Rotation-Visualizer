@@ -10,7 +10,6 @@ MAX_CONFIG_NAME_LENGTH = 200
 
 
 def _sanitize_name(v: str, max_len: int = MAX_CONFIG_NAME_LENGTH) -> str:
-    """Strip and limit length. Remove control characters."""
     if not isinstance(v, str):
         return v
     s = re.sub(r"[\x00-\x1f\x7f]", "", v.strip())
@@ -20,7 +19,7 @@ def _sanitize_name(v: str, max_len: int = MAX_CONFIG_NAME_LENGTH) -> str:
 class VisualizerConfigCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=MAX_CONFIG_NAME_LENGTH)
     system: str = Field(..., pattern="^(5-1|6-2)$")
-    rotations: list[dict] = Field(...)  # list of { players, annotations }
+    rotations: list[dict] = Field(...)
 
     @field_validator("name", mode="before")
     @classmethod

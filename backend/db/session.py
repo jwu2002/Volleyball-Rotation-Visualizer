@@ -1,6 +1,6 @@
-from collections.abc import AsyncGenerator
 import re
 import ssl
+from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -9,48 +9,21 @@ from db.base import Base
 
 database_url = (settings.database_url or "").strip()
 if not database_url:
-    raise RuntimeError(
-        "DATABASE_URL is not set. In Railway: Backend service → Variables → add DATABASE_URL as a Reference to your Postgres service → DATABASE_PUBLIC_URL (or DATABASE_URL). "
-        "Locally: set DATABASE_URL in backend/.env to your Supabase (or other) connection string."
-    )
-# Unresolved Railway reference or wrong value looks like ${{...}} or is not a URL
-if "${{" in database_url or not database_url.startswith("postgresql"):
-    hint = database_url[:60] + "..." if len(database_url) > 60 else database_url
-    raise RuntimeError(
-        f"DATABASE_URL does not look like a Postgres URL (got: {hint!r}). "
-        "In Railway: Backend → Variables → DATABASE_URL must be a Reference to Postgres → DATABASE_PUBLIC_URL. "
-        "If you use a raw value, paste the full postgresql://... string from the Postgres service."
-    )
+    raise RuntimeError("DATABASE_URL is not set.")
+
 if database_url.startswith("postgresql://") and "+asyncpg" not in database_url:
     database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-use_ssl = "sslmode=require" in database_url.lower()
-# Railway: private (railway.internal) = no SSL; public (*.rlwy.net) = SSL
-if "railway.internal" in database_url:
-    use_ssl = False
-elif "rlwy.net" in database_url:
-    use_ssl = True
+use_ssl = "sslmode=require" in database_url.lower() or "supabase" in database_url.lower()
 database_url = re.sub(r"[?&]sslmode=[^&]+", "", database_url, flags=re.IGNORECASE)
 database_url = re.sub(r"\?&", "?", database_url).rstrip("?")
 
-connect_args = {}
+connect_args = {"statement_cache_size": 0}
 if use_ssl:
-    # Use permissive SSL (skip cert verify) for Railway or when explicitly disabled (e.g. local dev with remote DB)
-    if settings.database_ssl_verify is False:
-        skip_verify = True
-    else:
-        skip_verify = "rlwy.net" in database_url or "railway" in database_url.lower()
-    if skip_verify:
-        ssl_ctx = ssl.create_default_context()
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
-        ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-        connect_args["ssl"] = ssl_ctx
-        # Omit direct_tls: some proxies (e.g. Railway) can reset when client uses direct TLS
-    else:
-        connect_args["ssl"] = True
-# Disable prepared statement cache when using pgbouncer (e.g. Supabase) in transaction/statement mode
-connect_args["statement_cache_size"] = 0
+    ssl_ctx = ssl.create_default_context()
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = ssl.CERT_NONE
+    connect_args["ssl"] = ssl_ctx
 
 engine = create_async_engine(
     database_url,

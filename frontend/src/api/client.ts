@@ -1,31 +1,7 @@
-/**
- * Backend API client. All methods require a Firebase ID token.
- */
-
 const BASE_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
 function getApiUrl(path: string): string {
-  const url = BASE_URL ? `${BASE_URL}${path}` : path;
-  if (typeof window !== "undefined") {
-    const origin = window.location.origin;
-    const isProduction = !origin.startsWith("http://localhost");
-    if (!BASE_URL || BASE_URL === origin) {
-      throw new Error(
-        "VITE_API_URL must be your Railway backend URL (e.g. https://xxx.up.railway.app). Set it in Vercel → Settings → Environment Variables and redeploy."
-      );
-    }
-    if (url.startsWith(origin)) {
-      throw new Error(
-        "VITE_API_URL must be your Railway backend URL, not the frontend URL. Fix it in Vercel environment variables and redeploy."
-      );
-    }
-    if (isProduction && (BASE_URL.startsWith("http://localhost") || BASE_URL.startsWith("http://127.0.0.1"))) {
-      throw new Error(
-        "VITE_API_URL was not set for this build. Add VITE_API_URL (your Railway backend URL) in Vercel → Project → Settings → Environment Variables, then redeploy."
-      );
-    }
-  }
-  return url;
+  return BASE_URL ? `${BASE_URL}${path}` : path;
 }
 
 async function request<T>(
@@ -141,24 +117,3 @@ export const configsApi = {
     request<void>("DELETE", `/configs/${id}`, token),
 };
 
-export type SavedPlanApi = {
-  id: string;
-  name: string;
-  payload: Record<string, unknown>;
-  createdAt?: string;
-  updatedAt?: string;
-};
-
-export const plansApi = {
-  list: (token: string) =>
-    request<SavedPlanApi[]>("GET", "/plans", token),
-
-  create: (token: string, body: { name: string; payload: Record<string, unknown> }) =>
-    request<SavedPlanApi>("POST", "/plans", token, body),
-
-  update: (token: string, id: string, body: { name?: string; payload?: Record<string, unknown> }) =>
-    request<SavedPlanApi>("PUT", `/plans/${id}`, token, body),
-
-  delete: (token: string, id: string) =>
-    request<void>("DELETE", `/plans/${id}`, token),
-};

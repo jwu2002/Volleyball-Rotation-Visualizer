@@ -10,18 +10,11 @@ def parse_cors_origins(v: Optional[str]) -> list[str]:
 
 
 class Settings(BaseSettings):
-    """Load from environment or .env file."""
-
     database_url: str = ""
     database_echo: bool = False
-    # Set to false to skip SSL cert verification (e.g. local dev with Railway Postgres). Default None = auto (skip for Railway URLs).
-    database_ssl_verify: Optional[bool] = None
-
     firebase_project_id: Optional[str] = None
-
-    cors_origins: Optional[str] = None  # Comma-separated, e.g. "https://myapp.vercel.app"
-
-    rate_limit: str = "20/minute"  # slowapi limit, e.g. "20/minute", "100/hour"
+    cors_origins: Optional[str] = None
+    rate_limit: str = "20/minute"
 
     class Config:
         env_file = ".env"

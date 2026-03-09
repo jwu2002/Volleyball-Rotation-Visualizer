@@ -69,7 +69,6 @@ export function useVisualizerState(
   const [rotationData, setRotationData] = useState<RotationSnapshot[]>(() =>
     getDefaultRotationDataInitial("5-1")
   );
-  /** Annotations for serve view only, per rotation (receive annotations live in rotationData). */
   const [serveAnnotationsData, setServeAnnotationsData] = useState<Annotation[][]>(() =>
     Array.from({ length: 6 }, () => [])
   );
@@ -89,8 +88,6 @@ export function useVisualizerState(
   const [selectedLineupId, setSelectedLineupId] = useState<string | null>(null);
   const [showSaveLineupModal, setShowSaveLineupModal] = useState(false);
   const [saveLineupName, setSaveLineupName] = useState("");
-  const [showSavePlanModal, setShowSavePlanModal] = useState(false);
-  const [savePlanName, setSavePlanName] = useState("");
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [drawMode, setDrawMode] = useState(false);
   const [drawPopoverOpen, setDrawPopoverOpen] = useState(false);
@@ -848,7 +845,6 @@ export function useVisualizerState(
   const handleDragEnd = useCallback(
     (id: string, x: number, y: number) => {
       const newPlayers = players.map((p) => (p.id === id ? { ...p, x, y } : p));
-      // Enforce rotation rules whenever court is unlocked (defaults and saved custom configs)
       if (!isLocked) {
       if (!isValidRotation(newPlayers, system, rotation)) {
           const message =
@@ -936,10 +932,6 @@ export function useVisualizerState(
     setSaveLineupName,
     setShowSaveLineupModal,
     handleSaveLineupSubmit,
-    showSavePlanModal,
-    savePlanName,
-    setSavePlanName,
-    setShowSavePlanModal,
     lineupExplorerOpen,
     setLineupExplorerOpen,
     showExportModal,
