@@ -32,8 +32,10 @@ database_url = re.sub(r"\?&", "?", database_url).rstrip("?")
 
 connect_args = {}
 if use_ssl:
-    # Use True for Railway so asyncpg uses its default SSL; custom context can cause "connection reset"
     connect_args["ssl"] = True
+    # Railway's proxy often resets STARTTLS; use direct TLS (connect encrypted from the start)
+    if "rlwy.net" in database_url or "railway" in database_url:
+        connect_args["direct_tls"] = True
 # Disable prepared statement cache when using pgbouncer (e.g. Supabase) in transaction/statement mode
 connect_args["statement_cache_size"] = 0
 
