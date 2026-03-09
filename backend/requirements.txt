@@ -10,3 +10,6 @@ asyncpg>=0.29.0
 # Auth (Firebase ID token verification)
 pyjwt>=2.8.0
 cryptography>=42.0.0
+
+# Rate limiting
+slowapi>=0.1.9

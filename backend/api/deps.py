@@ -5,11 +5,18 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import jwt
 from jwt import PyJWKClient
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from config import settings
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=[settings.rate_limit],
+)
 
 FIREBASE_JWKS_URL = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
 
