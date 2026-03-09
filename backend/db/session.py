@@ -24,21 +24,16 @@ if database_url.startswith("postgresql://") and "+asyncpg" not in database_url:
     database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 use_ssl = "sslmode=require" in database_url.lower()
-# Railway: private URL (postgres.railway.internal) = no SSL; public (*.proxy.rlwy.net) = SSL
-is_railway_private = "railway.internal" in database_url
-if is_railway_private:
-    use_ssl = False
-elif "rlwy.net" in database_url or "railway" in database_url:
+# Railway: use SSL for all Railway DB URLs (asyncpg default context works better than custom)
+if "rlwy.net" in database_url or "railway.internal" in database_url:
     use_ssl = True
 database_url = re.sub(r"[?&]sslmode=[^&]+", "", database_url, flags=re.IGNORECASE)
 database_url = re.sub(r"\?&", "?", database_url).rstrip("?")
 
 connect_args = {}
 if use_ssl:
-    ssl_ctx = ssl.create_default_context()
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode = ssl.CERT_NONE
-    connect_args["ssl"] = ssl_ctx
+    # Use True for Railway so asyncpg uses its default SSL; custom context can cause "connection reset"
+    connect_args["ssl"] = True
 # Disable prepared statement cache when using pgbouncer (e.g. Supabase) in transaction/statement mode
 connect_args["statement_cache_size"] = 0
 
