@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
@@ -7,6 +8,7 @@ from jwt import PyJWKClient
 
 from config import settings
 
+logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 FIREBASE_JWKS_URL = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
@@ -20,7 +22,8 @@ async def get_current_user_id(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> str:
     """Verify Firebase ID token and return the user's uid. Raises 401 if missing or invalid."""
-    if not credentials or credentials.credentials is None:
+    if not credentials or not (credentials.credentials or "").strip():
+        logger.warning("401: Missing or invalid authorization header")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid authorization header",
@@ -41,6 +44,7 @@ async def get_current_user_id(
             algorithms=["RS256"],
             audience=settings.firebase_project_id,
             issuer=f"https://securetoken.google.com/{settings.firebase_project_id}",
+            leeway=10,  # seconds: allow clock skew for iat/nbf/exp
         )
         uid = payload.get("user_id") or payload.get("sub")
         if not uid:
@@ -51,14 +55,17 @@ async def get_current_user_id(
             )
         return uid
     except jwt.ExpiredSignatureError:
+        logger.warning("401: Token expired")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token expired",
             headers={"WWW-Authenticate": "Bearer"},
         )
     except jwt.InvalidTokenError as e:
+        msg = str(e) or "Invalid token"
+        logger.warning("401: Invalid token - %s", msg)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
+            detail=msg,
             headers={"WWW-Authenticate": "Bearer"},
         )

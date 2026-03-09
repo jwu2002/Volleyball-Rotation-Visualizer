@@ -29,7 +29,9 @@ export type VisualizerViewContext = {
   rotation: number;
   system: "5-1" | "6-2";
   customConfigKey: string;
+  currentConfigDisplayName: string;
   updatePlayers: (sys: "5-1" | "6-2", rot: number, receive: boolean) => void;
+  handleServeReceiveChange: (useReceive: boolean) => void;
   handleRotationChange: (r: number) => void;
   handleSystemChange: (sys: "5-1" | "6-2") => void;
   players: VisualizerPlayer[];
@@ -58,8 +60,14 @@ export type VisualizerViewContext = {
   newName: string;
   newSystem: "5-1" | "6-2";
   newRotation: number;
+  saveConfigMode: "one" | "multi";
+  saveRotationOne: number;
+  saveRotationsMulti: boolean[];
   setNewName: (v: string) => void;
   setShowSaveModal: (v: boolean) => void;
+  setSaveConfigMode: (v: "one" | "multi") => void;
+  setSaveRotationOne: (v: number) => void;
+  setSaveRotationsMulti: React.Dispatch<React.SetStateAction<boolean[]>>;
   handleSaveNewConfig: () => void;
   handleOverwriteCurrentConfig: () => void;
   showSaveLineupModal: boolean;
@@ -108,6 +116,8 @@ export type VisualizerViewContext = {
   handleDragEnd: (id: string, x: number, y: number) => void;
   revertKey: number;
   showOutOfRotation: boolean;
+  outOfRotationMessage: string;
+  handleRevertOutOfRotation: () => void;
 };
 
 const DRAW_COLORS = ["#1a1a1a", "#e11d48", "#2563eb", "#16a34a"];
@@ -144,10 +154,7 @@ export function VisualizerView({ ctx }: Props) {
             <input
               type="checkbox"
               checked={!c.serveReceive}
-              onChange={() => {
-                c.setServeReceive(false);
-                if (!c.customConfigKey) c.updatePlayers(c.system, c.rotation, false);
-              }}
+              onChange={() => { c.setServeReceive(false); c.handleServeReceiveChange(false); }}
             />
             Serve
           </label>
@@ -155,10 +162,7 @@ export function VisualizerView({ ctx }: Props) {
             <input
               type="checkbox"
               checked={c.serveReceive}
-              onChange={() => {
-                c.setServeReceive(true);
-                if (!c.customConfigKey) c.updatePlayers(c.system, c.rotation, true);
-              }}
+              onChange={() => { c.setServeReceive(true); c.handleServeReceiveChange(true); }}
             />
             Receive
           </label>
@@ -281,6 +285,9 @@ export function VisualizerView({ ctx }: Props) {
                                 }
                                 c.setNewSystem(sys);
                                 c.setNewRotation(rot);
+                                c.setSaveConfigMode("one");
+                                c.setSaveRotationOne(c.rotation);
+                                c.setSaveRotationsMulti([false, false, false, false, false, false]);
                                 c.setShowSaveModal(true);
                               }}
                             >
@@ -512,6 +519,9 @@ export function VisualizerView({ ctx }: Props) {
               </div>
             )}
           </div>
+          <div className="current-config-label-wrap" aria-live="polite">
+            Current configuration: {c.currentConfigDisplayName || `Default (${c.system} R${c.rotation})`}
+          </div>
           <div className="court-scaled-wrap" ref={c.courtContainerRef}>
             <div
               className="court-scaled-inner"
@@ -565,8 +575,16 @@ export function VisualizerView({ ctx }: Props) {
               style={{ top: COURT_TOOLBAR_HEIGHT }}
               role="alert"
             >
-              <div className="out-of-rotation-message">Out of rotation</div>
-              <div className="out-of-rotation-sub">Reverted to previous position</div>
+              <div className="out-of-rotation-card">
+                <p className="out-of-rotation-message">{c.outOfRotationMessage || "Out of rotation"}</p>
+                <button
+                  type="button"
+                  className="out-of-rotation-revert-btn"
+                  onClick={c.handleRevertOutOfRotation}
+                >
+                  Ok
+                </button>
+              </div>
             </div>
           )}
         </div>

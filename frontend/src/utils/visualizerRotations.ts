@@ -140,6 +140,21 @@ export function normalizePlayerId(id: string): string {
   return id;
 }
 
+const ROLE_DISPLAY_NAMES: Record<string, string> = {
+  Setter1: "S1",
+  Setter2: "S2",
+  OH1: "OH1",
+  OH2: "OH2",
+  RS1: "RS1",
+  RS2: "RS2",
+  MB1: "MB1",
+  MB2: "MB2",
+};
+
+export function getRoleDisplayName(normalizedId: string): string {
+  return ROLE_DISPLAY_NAMES[normalizedId] ?? normalizedId;
+}
+
 export function playerIdToLineupKey(id: string): string {
   if (id === "Setter1") return "S1";
   if (id === "Setter2") return "S2";
@@ -193,6 +208,28 @@ export function getPosById(players: Player[]): Record<string, { x: number; y: nu
   return map;
 }
 
+/** Build position map for validation: libero is assigned to the back-row role they're subbing for (the one missing from non-libero). */
+export function getPosByIdForValidation(
+  players: Player[],
+  basePlayers: Player[]
+): Record<string, { x: number; y: number }> {
+  const map: Record<string, { x: number; y: number }> = {};
+  const libero = players.find((p) => p.label === "L" || p.isLibero);
+  const nonLibero = players.filter((p) => p !== libero);
+
+  for (const p of nonLibero) {
+    map[normalizePlayerId(p.id)] = { x: p.x, y: p.y };
+  }
+
+  if (libero && nonLibero.length === 5) {
+    const allRoleIds = basePlayers.map((p) => normalizePlayerId(p.id));
+    const missingRoleId = allRoleIds.find((id) => !(id in map));
+    if (missingRoleId) map[missingRoleId] = { x: libero.x, y: libero.y };
+  }
+
+  return map;
+}
+
 export function getBasePositions(system: "5-1" | "6-2", rotation: number): Record<string, { x: number; y: number }> {
   const base = system === "6-2" ? rotations62[rotation - 1] : rotations51[rotation - 1];
   return getPosById(base);
@@ -200,7 +237,8 @@ export function getBasePositions(system: "5-1" | "6-2", rotation: number): Recor
 
 export function isValidRotation(players: Player[], system: "5-1" | "6-2", rotation: number): boolean {
   const constraints = getConstraints(system, rotation);
-  const pos = getPosById(players);
+  const base = system === "6-2" ? rotations62[rotation - 1] : rotations51[rotation - 1];
+  const pos = getPosByIdForValidation(players, base);
   if (Object.keys(pos).length !== 6) return false;
   for (const [pid, c] of Object.entries(constraints)) {
     const p = pos[pid];
@@ -222,24 +260,64 @@ export function isValidRotation(players: Player[], system: "5-1" | "6-2", rotati
       if (!other || p.y <= other.y + TOLERANCE) return false;
     }
   }
-  const basePos = getBasePositions(system, rotation);
-  const pids = Object.keys(basePos);
-  for (let i = 0; i < pids.length; i++) {
-    for (let j = i + 1; j < pids.length; j++) {
-      const a = pids[i];
-      const b = pids[j];
-      const baseA = basePos[a];
-      const baseB = basePos[b];
-      const curA = pos[a];
-      const curB = pos[b];
-      if (!curA || !curB) continue;
-      if (baseA.x < baseB.x - TOLERANCE && curA.x >= curB.x - TOLERANCE) return false;
-      if (baseB.x < baseA.x - TOLERANCE && curB.x >= curA.x - TOLERANCE) return false;
-      if (baseA.y < baseB.y - TOLERANCE && curA.y >= curB.y - TOLERANCE) return false;
-      if (baseB.y < baseA.y - TOLERANCE && curB.y >= curA.y - TOLERANCE) return false;
+  return true;
+}
+
+/**
+ * Returns a specific, directional error message for the player that was moved and caused
+ * an out-of-rotation violation. Only checks constraints for that one player.
+ * e.g. "outside 1 must be in front of setter 1" or "right side 2 must be to the left of middle blocker 2 in rotation 1"
+ */
+export function getOutOfRotationMessage(
+  movedPlayerId: string,
+  newPlayers: Player[],
+  system: "5-1" | "6-2",
+  rotation: number
+): string | null {
+  const constraints = getConstraints(system, rotation);
+  const base = system === "6-2" ? rotations62[rotation - 1] : rotations51[rotation - 1];
+  const pos = getPosByIdForValidation(newPlayers, base);
+  if (Object.keys(pos).length !== 6) return null;
+  const pid = normalizePlayerId(movedPlayerId);
+  const c = constraints[pid];
+  if (!c) return null;
+  const p = pos[pid];
+  if (!p) return null;
+  const movedPlayer = newPlayers.find((pl) => normalizePlayerId(pl.id) === pid);
+  const roleName =
+    movedPlayer && (movedPlayer.label === "L" || movedPlayer.isLibero)
+      ? "L"
+      : getRoleDisplayName(pid);
+  const rotSuffix = ` in rotation ${rotation}`;
+  if (c.rightOf != null) {
+    const other = pos[c.rightOf];
+    if (!other || p.x <= other.x + TOLERANCE) {
+      const otherName = getRoleDisplayName(c.rightOf);
+      return `${roleName} must be to the right of ${otherName}${rotSuffix}`;
     }
   }
-  return true;
+  if (c.leftOf != null) {
+    const other = pos[c.leftOf];
+    if (!other || p.x >= other.x - TOLERANCE) {
+      const otherName = getRoleDisplayName(c.leftOf);
+      return `${roleName} must be to the left of ${otherName}${rotSuffix}`;
+    }
+  }
+  if (c.inFrontOf != null) {
+    const other = pos[c.inFrontOf];
+    if (!other || p.y >= other.y - TOLERANCE) {
+      const otherName = getRoleDisplayName(c.inFrontOf);
+      return `${roleName} must be in front of ${otherName}${rotSuffix}`;
+    }
+  }
+  if (c.behind != null) {
+    const other = pos[c.behind];
+    if (!other || p.y <= other.y + TOLERANCE) {
+      const otherName = getRoleDisplayName(c.behind);
+      return `${roleName} must be behind ${otherName}${rotSuffix}`;
+    }
+  }
+  return null;
 }
 
 export function getRotationSet(sys: "5-1" | "6-2"): Player[][] {

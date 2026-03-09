@@ -153,6 +153,14 @@
   background: var(--accent-hover);
 }
 
+.current-config-label-wrap {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 6px 0 8px 2px;
+  flex-shrink: 0;
+}
+
 .court-column {
   position: relative;
   flex: 1;
@@ -167,15 +175,17 @@
   left: 0;
   right: 0;
   bottom: 0;
+  /* top set via inline style for COURT_TOOLBAR_HEIGHT */
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   color: var(--text);
   z-index: 100;
-  pointer-events: none;
-  animation: out-of-rotation-fade 0.1s ease-out;
+  pointer-events: auto;
+  animation: out-of-rotation-fade 0.15s ease-out;
 }
 
 @keyframes out-of-rotation-fade {
@@ -187,16 +197,49 @@
   }
 }
 
-.out-of-rotation-message {
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+.out-of-rotation-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  max-width: min(90vw, 420px);
+  padding: 1.5rem 1.75rem;
+  background: var(--surface, #1a1a1a);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.2);
 }
 
-.out-of-rotation-sub {
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-  margin-top: 4px;
+.out-of-rotation-message {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  text-align: center;
+  color: var(--text);
+}
+
+.out-of-rotation-revert-btn {
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--bg, #0f0f0f);
+  background: var(--accent, #0ea5e9);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.out-of-rotation-revert-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.35);
+}
+
+.out-of-rotation-revert-btn:active {
+  transform: translateY(0);
 }
 
 .court-toolbar-wrap {

@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -5,9 +6,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.routes import configs, lineups, plans
+from config import settings
 from db.base import Base
 from db.session import engine
-from models import Lineup, Plan, VisualizerConfig 
+from models import Lineup, Plan, VisualizerConfig
+
+logger = logging.getLogger(__name__)
 
 
 async def create_tables():
@@ -18,6 +22,10 @@ async def create_tables():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await create_tables()
+    if settings.firebase_project_id:
+        logger.info("Firebase auth: project_id=%s (must match frontend)", settings.firebase_project_id)
+    else:
+        logger.warning("Firebase project ID not set; auth will return 503 for protected routes")
     yield
     await engine.dispose()
 

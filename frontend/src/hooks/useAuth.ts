@@ -15,7 +15,10 @@ import {
 import type { User } from "firebase/auth";
 import { auth } from "../firebaseConfig";
 
-export function useAuth() {
+type ToastType = "success" | "error" | "info";
+
+export function useAuth(options?: { showToast: (message: string, type?: ToastType) => void }) {
+  const showToast = options?.showToast ?? ((msg: string) => alert(msg));
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,7 +48,7 @@ export function useAuth() {
         try {
           const result = await linkWithPopup(currentUser, provider);
           console.log("✅ Linked anonymous account to Google:", result.user.uid);
-          alert("Linked this session to your Google account!");
+          showToast("Account linked to Google.", "success");
         } catch (err: unknown) {
           const e = err as { code?: string };
           console.warn("Link with Google failed:", e?.code, err);
@@ -57,11 +60,11 @@ export function useAuth() {
             if (cred) {
               const res = await signInWithCredential(auth, cred);
               console.log("✅ Signed in with existing Google account:", res.user.uid);
-              alert("Signed in with your existing Google account.");
+              showToast("Signed in with your existing Google account.", "success");
             } else {
               const res = await signInWithPopup(auth, provider);
               console.log("✅ Signed in with Google via popup:", res.user.uid);
-              alert("Signed in with Google.");
+              showToast("Signed in with Google.", "success");
             }
           } else if (e?.code === "auth/popup-closed-by-user") {
             return;
@@ -72,39 +75,39 @@ export function useAuth() {
       } else {
         const res = await signInWithPopup(auth, provider);
         console.log("✅ Signed in with Google:", res.user.uid);
-        alert("Signed in with Google.");
+        showToast("Signed in with Google.", "success");
       }
       setShowAccountMenu(false);
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string };
       console.error("🔥 Google sign-in error:", err);
-      alert(`Google sign-in failed: ${e?.code || e?.message || "Unknown error"}`);
+      showToast(`Sign-in failed: ${e?.code || e?.message || "Unknown error"}`, "error");
     }
   };
 
   const handleEmailSignUp = async () => {
     try {
       if (!email || !password) {
-        alert("Please enter email and password.");
+        showToast("Please enter email and password.", "info");
         return;
       }
       const cred = EmailAuthProvider.credential(email, password);
       if (user && user.isAnonymous) {
         await linkWithCredential(user, cred);
-        alert("Account created and linked to this session!");
+        showToast("Account created and linked to this session.", "success");
       } else {
         await createUserWithEmailAndPassword(auth, email, password);
-        alert("Account created!");
+        showToast("Account created.", "success");
       }
       setEmail("");
       setPassword("");
     } catch (err: unknown) {
       const e = err as { code?: string };
       if (e?.code === "auth/email-already-in-use") {
-        alert("That email is already in use. Try 'Sign in with email' instead.");
+        showToast("That email is already in use. Try 'Sign in with email' instead.", "error");
       } else {
         console.error("Email sign-up error:", err);
-        alert("Email sign-up failed. Check console for details.");
+        showToast("Sign-up failed. Check email and try again.", "error");
       }
     }
   };
@@ -112,16 +115,16 @@ export function useAuth() {
   const handleEmailSignIn = async () => {
     try {
       if (!email || !password) {
-        alert("Please enter email and password.");
+        showToast("Please enter email and password.", "info");
         return;
       }
       await signInWithEmailAndPassword(auth, email, password);
-      alert("Signed in with email.");
+      showToast("Signed in with email.", "success");
       setEmail("");
       setPassword("");
     } catch (err) {
       console.error("Email sign-in error:", err);
-      alert("Email sign-in failed. Check email/password and try again.");
+      showToast("Sign-in failed. Check email and password.", "error");
     }
   };
 

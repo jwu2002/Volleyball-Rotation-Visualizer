@@ -20,7 +20,16 @@ async function request<T>(
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(res.status === 401 ? "Unauthorized" : text || `HTTP ${res.status}`);
+    let detail = text;
+    if (res.status === 401) {
+      try {
+        const j = JSON.parse(text) as { detail?: string };
+        detail = j.detail ? `Unauthorized: ${j.detail}` : "Unauthorized";
+      } catch {
+        detail = text || "Unauthorized";
+      }
+    }
+    throw new Error(detail || `HTTP ${res.status}`);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;

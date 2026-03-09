@@ -17,6 +17,7 @@ import {
   getDefaultRotationDataInitial,
   applyLiberoToBackRowMiddle,
   isValidRotation,
+  getOutOfRotationMessage,
   getRotationSet,
   rotations51,
   type Player,
@@ -31,10 +32,18 @@ import {
 } from "../constants";
 import { loadLineupFromStorage, getDisplayLabel } from "../utils/lineupHelpers";
 
+type ToastType = "success" | "error" | "info";
+
 export function useVisualizerState(
   user: { isAnonymous?: boolean; email?: string | null } | null,
-  activeView: "court" | "planAhead"
+  activeView: "court" | "planAhead",
+  options?: {
+    showToast: (message: string, type?: ToastType) => void;
+    showConfirm: (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => void;
+  }
 ): VisualizerViewContext {
+  const showToast = options?.showToast ?? ((msg: string) => alert(msg));
+  const showConfirm = options?.showConfirm ?? ((_t, _m, onConfirm) => { if (window.confirm(_m)) onConfirm(); });
   const mainContentRef = useRef<HTMLDivElement>(null);
   const courtContainerRef = useRef<HTMLDivElement>(null);
   const [courtScale, setCourtScale] = useState(1);
@@ -50,6 +59,9 @@ export function useVisualizerState(
   const [newName, setNewName] = useState("");
   const [newSystem, setNewSystem] = useState<"5-1" | "6-2">("5-1");
   const [newRotation, setNewRotation] = useState<number>(1);
+  const [saveConfigMode, setSaveConfigMode] = useState<"one" | "multi">("one");
+  const [saveRotationOne, setSaveRotationOne] = useState<number>(1);
+  const [saveRotationsMulti, setSaveRotationsMulti] = useState<boolean[]>([false, false, false, false, false, false]);
   const [customConfigs, setCustomConfigs] = useState<SavedVisualizerConfig[]>([]);
   const [serveReceive, setServeReceive] = useState(true);
   const [system, setSystem] = useState<"5-1" | "6-2">("5-1");
@@ -57,12 +69,16 @@ export function useVisualizerState(
   const [rotationData, setRotationData] = useState<RotationSnapshot[]>(() =>
     getDefaultRotationDataInitial("5-1")
   );
+  /** Annotations for serve view only, per rotation (receive annotations live in rotationData). */
+  const [serveAnnotationsData, setServeAnnotationsData] = useState<Annotation[][]>(() =>
+    Array.from({ length: 6 }, () => [])
+  );
   const [customConfigKey, setCustomConfigKey] = useState<string>("");
   const [showLiberoModal, setShowLiberoModal] = useState(false);
   const [liberoTargetId, setLiberoTargetId] = useState<string | null>(null);
   const [showOutOfRotation, setShowOutOfRotation] = useState(false);
+  const [outOfRotationMessage, setOutOfRotationMessage] = useState("");
   const [revertKey, setRevertKey] = useState(0);
-  const outOfRotationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lineup, setLineup] = useState<Lineup>(() => loadLineupFromStorage().lineup);
   const [savedLineups, setSavedLineups] = useState<
     { id: string; name: string; lineup: Lineup; showNumber: boolean; showName: boolean }[]
@@ -95,6 +111,7 @@ export function useVisualizerState(
     annotationsRef.current = annotations;
   }, [annotations]);
 
+  const userKey = user ? `${user.uid}-${user.isAnonymous}-${user.email ?? ""}` : "";
   useEffect(() => {
     if (!user) {
       setCustomConfigs([]);
@@ -109,7 +126,7 @@ export function useVisualizerState(
       const u = auth.currentUser;
       if (!u) return;
       try {
-        const token = await u.getIdToken();
+        const token = await u.getIdToken(true);
         const [configs, list] = await Promise.all([
           fetchSavedVisualizerConfigs(token),
           fetchSavedLineupsFromApi(token),
@@ -123,9 +140,10 @@ export function useVisualizerState(
       }
     };
     loadFromApi();
-  }, [user]);
+  }, [user, userKey]);
 
   useEffect(() => {
+    if (!serveReceive) return;
     setRotationData((prev) => {
       const idx = rotation - 1;
       if (idx < 0 || idx >= 6) return prev;
@@ -138,7 +156,14 @@ export function useVisualizerState(
           : r
       );
     });
-  }, [players, annotations, rotation]);
+  }, [players, annotations, rotation, serveReceive]);
+
+  useEffect(() => {
+    if (serveReceive) return;
+    setServeAnnotationsData((prev) =>
+      prev.map((arr, i) => (i === rotation - 1 ? JSON.parse(JSON.stringify(annotations)) : arr))
+    );
+  }, [annotations, rotation, serveReceive]);
 
   const pushUndo = useCallback(() => {
     redoStackRef.current = [];
@@ -233,6 +258,7 @@ export function useVisualizerState(
         const def = allDefaults.find((d) => d.id === value);
         if (def) setPlayers(JSON.parse(JSON.stringify(def.players)));
         setAnnotations([]);
+        setServeAnnotationsData(Array.from({ length: 6 }, () => []));
         return;
       }
       if (value.startsWith("custom:")) {
@@ -276,6 +302,7 @@ export function useVisualizerState(
             );
           }
           setRotationData(data);
+          setServeAnnotationsData(Array.from({ length: 6 }, () => []));
           const snap = data[rotation - 1];
           setPlayers(JSON.parse(JSON.stringify(snap.players)) as Player[]);
           setAnnotations(JSON.parse(JSON.stringify(snap.annotations)) as Annotation[]);
@@ -311,22 +338,31 @@ export function useVisualizerState(
     (rot: number) => {
       if (rot === rotation) return;
       const idx = rotation - 1;
-      const nextData = rotationData.map((r, i) =>
-        i === idx
-          ? {
-              players: JSON.parse(JSON.stringify(players)) as Player[],
-              annotations: JSON.parse(JSON.stringify(annotations)) as Annotation[],
-            }
-          : r
-      );
-      setRotationData(nextData);
-      setRotation(rot);
-      const snap = nextData[rot - 1];
-      setPlayers(JSON.parse(JSON.stringify(snap.players)) as Player[]);
-      setAnnotations(JSON.parse(JSON.stringify(snap.annotations)) as Annotation[]);
+      if (serveReceive) {
+        const nextData = rotationData.map((r, i) =>
+          i === idx
+            ? {
+                players: JSON.parse(JSON.stringify(players)) as Player[],
+                annotations: JSON.parse(JSON.stringify(annotations)) as Annotation[],
+              }
+            : r
+        );
+        setRotationData(nextData);
+        setRotation(rot);
+        const snap = nextData[rot - 1];
+        setPlayers(JSON.parse(JSON.stringify(snap.players)) as Player[]);
+        setAnnotations(JSON.parse(JSON.stringify(snap.annotations)) as Annotation[]);
+      } else {
+        setServeAnnotationsData((prev) =>
+          prev.map((arr, i) => (i === idx ? JSON.parse(JSON.stringify(annotations)) : arr))
+        );
+        setRotation(rot);
+        setPlayers(JSON.parse(JSON.stringify(getRotationSet(system)[rot - 1])));
+        setAnnotations(serveAnnotationsData[rot - 1] ? JSON.parse(JSON.stringify(serveAnnotationsData[rot - 1])) : []);
+      }
       setSelectedAnnotationIndices([]);
     },
-    [rotation, rotationData, players, annotations]
+    [rotation, rotationData, players, annotations, serveReceive, system, serveAnnotationsData]
   );
 
   const handleCustomConfigChange = useCallback(
@@ -359,7 +395,7 @@ export function useVisualizerState(
       return;
     }
     try {
-      const token = await u.getIdToken();
+      const token = await u.getIdToken(true);
       const configs = await fetchSavedVisualizerConfigs(token);
       setCustomConfigs(configs);
     } catch {
@@ -374,7 +410,7 @@ export function useVisualizerState(
       return;
     }
     try {
-      const token = await u.getIdToken();
+      const token = await u.getIdToken(true);
       const list = await fetchSavedLineupsFromApi(token);
       setSavedLineups(list);
       setSelectedLineupId((prev) => (prev && list.some((l) => l.id === prev)) ? prev : null);
@@ -428,44 +464,42 @@ export function useVisualizerState(
     };
   }, [activeView]);
 
-  useEffect(() => {
-    return () => {
-      if (outOfRotationTimeoutRef.current) clearTimeout(outOfRotationTimeoutRef.current);
-    };
-  }, []);
 
-  const handleOverwriteCurrentConfig = useCallback(async () => {
+  const handleOverwriteCurrentConfig = useCallback(() => {
     if (!customConfigKey.startsWith("custom:")) {
-      alert("Only custom configurations can be overwritten.");
+      showToast("Only custom configurations can be overwritten.", "info");
       return;
     }
     const id = customConfigKey.split("custom:")[1];
-    const confirmed = window.confirm(
-      "This will overwrite the currently selected configuration with the positions you see on the court (all 6 rotations). This cannot be undone. Continue?"
-    );
-    if (!confirmed) return;
+    const configName = customConfigs.find((c) => c.id === id)?.name ?? "this configuration";
     const currentUser = auth.currentUser;
     if (!currentUser) {
-      alert("Not signed in.");
+      showToast("Not signed in.", "info");
       return;
     }
-    try {
-      const payload = {
-        system,
-        rotations: rotationData.map((r) => ({
-          players: JSON.parse(JSON.stringify(r.players)),
-          annotations: JSON.parse(JSON.stringify(r.annotations)),
-        })),
-      };
-      const token = await currentUser.getIdToken();
-      await updateVisualizerConfig(currentUser.uid, id, payload, token);
-      alert("Configuration updated.");
-      await fetchCustomConfigs();
-    } catch (err) {
-      console.error("Error overwriting config:", err);
-      alert("Failed to overwrite configuration. Check console for details.");
-    }
-  }, [customConfigKey, system, rotationData, fetchCustomConfigs]);
+    showConfirm(
+      "Overwrite configuration",
+      `The rotation(s) you selected will be overwritten in "${configName}". This cannot be undone.`,
+      async () => {
+        try {
+          const payload = {
+            system,
+            rotations: rotationData.map((r) => ({
+              players: JSON.parse(JSON.stringify(r.players)),
+              annotations: JSON.parse(JSON.stringify(r.annotations)),
+            })),
+          };
+          const token = await currentUser.getIdToken(true);
+          await updateVisualizerConfig(currentUser.uid, id, payload, token);
+          showToast("Configuration updated.", "success");
+          await fetchCustomConfigs();
+        } catch (err) {
+          console.error("Error overwriting config:", err);
+          showToast("Failed to overwrite configuration.", "error");
+        }
+      }
+    );
+  }, [customConfigKey, customConfigs, system, rotationData, fetchCustomConfigs, showToast, showConfirm]);
 
   const currentLibero = players.find((p) => p.label === "L");
 
@@ -482,6 +516,66 @@ export function useVisualizerState(
     [players, lineup]
   );
 
+  const currentConfigDisplayName = useMemo(() => {
+    if (!customConfigKey) return `Default (${system} R${rotation})`;
+    if (customConfigKey.includes("-default")) {
+      const allDefaults = [...default51Rotations, ...default62Rotations];
+      const def = allDefaults.find((d) => d.id === customConfigKey);
+      return def ? def.name : `Default (${system} R${rotation})`;
+    }
+    if (customConfigKey.startsWith("custom:")) {
+      const id = customConfigKey.split("custom:")[1];
+      const cfg = customConfigs.find((c) => c.id === id);
+      return cfg ? cfg.name : "";
+    }
+    return "";
+  }, [customConfigKey, customConfigs, system, rotation]);
+
+  const handleServeReceiveChange = useCallback(
+    (useReceive: boolean) => {
+      if (!customConfigKey) {
+        if (useReceive) {
+          const snap = rotationData[rotation - 1];
+          if (snap?.players?.length) {
+            setPlayers(JSON.parse(JSON.stringify(snap.players)) as Player[]);
+            setAnnotations(snap.annotations?.length ? JSON.parse(JSON.stringify(snap.annotations)) : []);
+          } else {
+            updatePlayers(system, rotation, true);
+          }
+        } else {
+          setPlayers(JSON.parse(JSON.stringify(getRotationSet(system)[rotation - 1])));
+          setAnnotations(serveAnnotationsData[rotation - 1] ? JSON.parse(JSON.stringify(serveAnnotationsData[rotation - 1])) : []);
+        }
+        return;
+      }
+      if (customConfigKey.includes("-default")) {
+        if (useReceive) {
+          const allDefaults = [...default51Rotations, ...default62Rotations];
+          const def = allDefaults.find((d) => d.id === customConfigKey);
+          if (def) setPlayers(applyLiberoToBackRowMiddle(JSON.parse(JSON.stringify(def.players))));
+          setAnnotations([]);
+        } else {
+          setPlayers(JSON.parse(JSON.stringify(getRotationSet(system)[rotation - 1])));
+          setAnnotations(serveAnnotationsData[rotation - 1] ? JSON.parse(JSON.stringify(serveAnnotationsData[rotation - 1])) : []);
+        }
+        return;
+      }
+      if (customConfigKey.startsWith("custom:")) {
+        if (useReceive) {
+          const snap = rotationData[rotation - 1];
+          if (snap) {
+            setPlayers(JSON.parse(JSON.stringify(snap.players)) as Player[]);
+            setAnnotations(JSON.parse(JSON.stringify(snap.annotations)) as Annotation[]);
+          }
+        } else {
+          setPlayers(JSON.parse(JSON.stringify(getRotationSet(system)[rotation - 1])));
+          setAnnotations(serveAnnotationsData[rotation - 1] ? JSON.parse(JSON.stringify(serveAnnotationsData[rotation - 1])) : []);
+        }
+      }
+    },
+    [customConfigKey, system, rotation, rotationData, serveAnnotationsData, updatePlayers]
+  );
+
   const handleSelectLineupResolved = useCallback((id: string | null) => {
     setSelectedLineupId(id);
     if (!id) return;
@@ -491,21 +585,21 @@ export function useVisualizerState(
 
   const handleSaveLineupClick = useCallback(() => {
     if (!user || user.isAnonymous) {
-      alert("Sign in to save lineups.");
+      showToast("Sign in to save lineups.", "info");
       return;
     }
     setSaveLineupName(
       selectedLineupId ? savedLineups.find((l) => l.id === selectedLineupId)?.name ?? "" : ""
     );
     setShowSaveLineupModal(true);
-  }, [user, selectedLineupId, savedLineups]);
+  }, [user, selectedLineupId, savedLineups, showToast]);
 
   const handleSaveLineupSubmit = useCallback(async () => {
     const u = auth.currentUser;
     if (!u) return;
     const name = saveLineupName.trim() || "Unnamed lineup";
     try {
-      const token = await u.getIdToken();
+      const token = await u.getIdToken(true);
       if (selectedLineupId) {
         await updateLineup(u.uid, selectedLineupId, name, lineup, true, false, token);
       } else {
@@ -517,46 +611,77 @@ export function useVisualizerState(
       setSaveLineupName("");
     } catch (err) {
       console.error("Save lineup error:", err);
-      alert("Failed to save lineup. Check console for details.");
+      showToast("Failed to save lineup.", "error");
     }
-  }, [saveLineupName, selectedLineupId, lineup, fetchSavedLineups]);
+  }, [saveLineupName, selectedLineupId, lineup, fetchSavedLineups, showToast]);
 
   const handleSaveNewConfig = useCallback(async () => {
     const currentUser = auth.currentUser;
     if (!currentUser) {
-      alert("Not signed in yet. Please wait a moment or log in.");
+      showToast("Not signed in yet. Please wait a moment or log in.", "info");
       return;
     }
     const trimmedName = (newName || "").trim();
     if (!trimmedName) {
-      alert("Please enter a name for this configuration.");
+      showToast("Please enter a name for this configuration.", "info");
       return;
+    }
+    const defaultData = getDefaultRotationDataInitial(newSystem);
+    let rotationsToSave: RotationSnapshot[];
+    if (saveConfigMode === "one") {
+      rotationsToSave = defaultData.map((r, i) =>
+        i === saveRotationOne - 1
+          ? { players: JSON.parse(JSON.stringify(players)), annotations: JSON.parse(JSON.stringify(annotations)) }
+          : { players: JSON.parse(JSON.stringify(r.players)), annotations: [...(r.annotations || [])] }
+      );
+    } else {
+      const selected = saveRotationsMulti.map((v, i) => (v ? i + 1 : 0)).filter(Boolean);
+      if (selected.length === 0) {
+        showToast("Select at least one rotation to save.", "info");
+        return;
+      }
+      rotationsToSave = defaultData.map((r, i) =>
+        saveRotationsMulti[i]
+          ? { players: JSON.parse(JSON.stringify(rotationData[i].players)), annotations: JSON.parse(JSON.stringify(rotationData[i].annotations)) }
+          : { players: JSON.parse(JSON.stringify(r.players)), annotations: [...(r.annotations || [])] }
+      );
     }
     try {
       const payload = {
         system: newSystem,
-        rotations: rotationData.map((r) => ({
-          players: JSON.parse(JSON.stringify(r.players)),
-          annotations: JSON.parse(JSON.stringify(r.annotations)),
-        })),
+        rotations: rotationsToSave,
       };
-      const token = await currentUser.getIdToken();
+      const token = await currentUser.getIdToken(true);
       const saved = await saveVisualizerConfig(currentUser.uid, trimmedName, payload, token);
-      alert("Configuration saved!");
+      showToast("Configuration saved.", "success");
       setShowSaveModal(false);
       setNewName("");
+      setSaveRotationsMulti([false, false, false, false, false, false]);
       await fetchCustomConfigs();
       setCustomConfigKey(`custom:${saved.id}`);
       setSystem(newSystem);
-      setRotation(newRotation);
-      const snap = rotationData[newRotation - 1];
+      setRotation(saveConfigMode === "one" ? saveRotationOne : 1);
+      const snap = rotationsToSave[saveConfigMode === "one" ? saveRotationOne - 1 : 0];
+      setRotationData(rotationsToSave.map((r) => ({ players: JSON.parse(JSON.stringify(r.players)), annotations: JSON.parse(JSON.stringify(r.annotations)) })));
       setPlayers(JSON.parse(JSON.stringify(snap.players)) as Player[]);
       setAnnotations(JSON.parse(JSON.stringify(snap.annotations)) as Annotation[]);
     } catch (err: unknown) {
       console.error("Error saving config:", err);
-      alert(`Failed to save configuration. ${err instanceof Error ? err.message : ""}`);
+      showToast(err instanceof Error ? err.message : "Failed to save configuration.", "error");
     }
-  }, [newName, newSystem, newRotation, rotationData, fetchCustomConfigs]);
+  }, [
+    showToast,
+    newName,
+    newSystem,
+    saveConfigMode,
+    saveRotationOne,
+    saveRotationsMulti,
+    rotationData,
+    players,
+    annotations,
+    getDefaultRotationDataInitial,
+    fetchCustomConfigs,
+  ]);
 
   const handleConfirmLiberoSwitch = useCallback(() => {
     if (!liberoTargetId) {
@@ -582,22 +707,28 @@ export function useVisualizerState(
   const handleDragEnd = useCallback(
     (id: string, x: number, y: number) => {
       const newPlayers = players.map((p) => (p.id === id ? { ...p, x, y } : p));
-      if (!customConfigKey && !isLocked) {
-        if (!isValidRotation(newPlayers, system, rotation)) {
-          if (outOfRotationTimeoutRef.current) clearTimeout(outOfRotationTimeoutRef.current);
+      // Enforce rotation rules whenever court is unlocked (defaults and saved custom configs)
+      if (!isLocked) {
+      if (!isValidRotation(newPlayers, system, rotation)) {
+          const message =
+            getOutOfRotationMessage(id, newPlayers, system, rotation) ?? "Out of rotation";
+          setOutOfRotationMessage(message);
           setShowOutOfRotation(true);
           setRevertKey((k) => k + 1);
-          outOfRotationTimeoutRef.current = setTimeout(() => {
-            setShowOutOfRotation(false);
-            outOfRotationTimeoutRef.current = null;
-          }, 1200);
+          setPlayers((prev) => prev.map((p) => (p.id === id ? { ...p, x: p.x, y: p.y } : { ...p })));
           return;
         }
       }
       setPlayers(newPlayers);
     },
-    [players, customConfigKey, isLocked, system, rotation]
+    [players, isLocked, system, rotation]
   );
+
+  const handleRevertOutOfRotation = useCallback(() => {
+    setShowOutOfRotation(false);
+    setOutOfRotationMessage("");
+    showToast("Reverted to previous position.", "success");
+  }, [showToast]);
 
   return {
     mainContentRef,
@@ -609,7 +740,9 @@ export function useVisualizerState(
     rotation,
     system,
     customConfigKey,
+    currentConfigDisplayName,
     updatePlayers,
+    handleServeReceiveChange,
     handleRotationChange,
     handleSystemChange,
     players: players as VisualizerPlayer[],
@@ -638,8 +771,14 @@ export function useVisualizerState(
     newName,
     newSystem,
     newRotation,
+    saveConfigMode,
+    saveRotationOne,
+    saveRotationsMulti,
     setNewName,
     setShowSaveModal,
+    setSaveConfigMode,
+    setSaveRotationOne,
+    setSaveRotationsMulti,
     handleSaveNewConfig,
     handleOverwriteCurrentConfig,
     showSaveLineupModal,
@@ -688,5 +827,7 @@ export function useVisualizerState(
     handleDragEnd,
     revertKey,
     showOutOfRotation,
+    outOfRotationMessage,
+    handleRevertOutOfRotation,
   };
 }

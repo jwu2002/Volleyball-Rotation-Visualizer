@@ -8,23 +8,30 @@ export function SaveConfigModal(props: {
   open: boolean;
   name: string;
   system: "5-1" | "6-2";
-  rotation: number;
+  currentRotation: number;
+  saveMode: "one" | "multi";
+  saveRotationOne: number;
+  saveRotationsMulti: boolean[];
   onNameChange: (v: string) => void;
   onSystemChange: (v: "5-1" | "6-2") => void;
-  onRotationChange: (v: number) => void;
+  onSaveModeChange: (mode: "one" | "multi") => void;
+  onSaveRotationOneChange: (r: number) => void;
+  onSaveRotationsMultiChange: (index: number, checked: boolean) => void;
   onSave: () => void;
   onClose: () => void;
 }) {
   if (!props.open) return null;
+  const selectedMulti = props.saveRotationsMulti.map((v, i) => (v ? i + 1 : 0)).filter(Boolean);
   return (
     <div className="modal-overlay">
-      <div className="modal-panel">
+      <div className="modal-panel save-config-modal-panel">
         <h3 className="modal-title">Save Configuration</h3>
         <input
           type="text"
           placeholder="Enter name (rotation prefix will be added)"
           value={props.name}
           onChange={(e) => props.onNameChange(e.target.value)}
+          className="modal-input"
         />
         <div className="modal-section">
           <label>5-1 or 6-2</label>
@@ -39,18 +46,75 @@ export function SaveConfigModal(props: {
             </label>
           </div>
         </div>
-        <div>
-          <label style={{ display: "block", marginBottom: 6, fontSize: "0.8125rem" }}>Rotation</label>
-          <select value={props.rotation} onChange={(e) => props.onRotationChange(Number(e.target.value))}>
+
+        <div className="modal-section">
+          <label className="modal-section-label">Save 1 rotation</label>
+          <label className="save-config-option-row">
+            <input
+              type="radio"
+              name="saveConfigMode"
+              checked={props.saveMode === "one"}
+              onChange={() => props.onSaveModeChange("one")}
+            />
+            <span>Save current court as rotation</span>
+            <select
+              value={props.saveRotationOne}
+              onChange={(e) => props.onSaveRotationOneChange(Number(e.target.value))}
+              disabled={props.saveMode !== "one"}
+            >
+              {[1, 2, 3, 4, 5, 6].map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="modal-section">
+          <label className="modal-section-label">Save multiple rotations</label>
+          <label className="save-config-option-row" style={{ marginBottom: 8 }}>
+            <input
+              type="radio"
+              name="saveConfigMode"
+              checked={props.saveMode === "multi"}
+              onChange={() => props.onSaveModeChange("multi")}
+            />
+            <span>Save selected rotations (current configs/drawings for checked slots)</span>
+          </label>
+          <p className="modal-description" style={{ marginBottom: 8 }}>Check the rotations to save:</p>
+          <div className="save-config-multi-checkboxes">
             {[1, 2, 3, 4, 5, 6].map((r) => (
-              <option key={r} value={r}>{r}</option>
+              <label key={r} className="save-config-check-label">
+                <input
+                  type="checkbox"
+                  checked={props.saveRotationsMulti[r - 1]}
+                  onChange={(e) => props.onSaveRotationsMultiChange(r - 1, e.target.checked)}
+                  disabled={props.saveMode !== "multi"}
+                />
+                <span>{r}</span>
+              </label>
             ))}
-          </select>
+          </div>
+          <button
+            type="button"
+            className="btn btn-success save-config-all-btn"
+            disabled={props.saveMode !== "multi" || selectedMulti.length === 0}
+            onClick={props.onSave}
+          >
+            Save all rotations
+          </button>
         </div>
-        <div className="modal-actions">
-          <button type="button" className="btn btn-success" onClick={props.onSave}>Save</button>
-          <button type="button" className="btn btn-secondary" onClick={props.onClose}>Cancel</button>
-        </div>
+
+        {props.saveMode === "one" && (
+          <div className="modal-actions">
+            <button type="button" className="btn btn-success" onClick={props.onSave}>Save</button>
+            <button type="button" className="btn btn-secondary" onClick={props.onClose}>Cancel</button>
+          </div>
+        )}
+        {props.saveMode === "multi" && (
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={props.onClose}>Cancel</button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -222,6 +286,59 @@ export function LiberoModal(props: {
         <div className="modal-actions">
           <button type="button" className="btn btn-success" onClick={props.onConfirm} disabled={!props.liberoTargetId}>Apply</button>
           <button type="button" className="btn btn-secondary" onClick={props.onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export type ToastType = "success" | "error" | "info";
+
+export function Toast(props: {
+  message: string;
+  type: ToastType;
+  onDismiss: () => void;
+  visible: boolean;
+}) {
+  if (!props.visible) return null;
+  return (
+    <div
+      className={`toast toast-${props.type}`}
+      role="status"
+      aria-live="polite"
+    >
+      <span className="toast-message">{props.message}</span>
+      <button
+        type="button"
+        className="toast-dismiss"
+        onClick={props.onDismiss}
+        aria-label="Dismiss"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+export function ConfirmModal(props: {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!props.open) return null;
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1600 }}>
+      <div className="modal-panel confirm-modal-panel" onClick={(e) => e.stopPropagation()}>
+        <h3 className="modal-title">{props.title}</h3>
+        <p className="modal-description" style={{ marginBottom: 16 }}>{props.message}</p>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-success" onClick={props.onConfirm}>
+            {props.confirmLabel ?? "Continue"}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={props.onCancel}>Cancel</button>
         </div>
       </div>
     </div>

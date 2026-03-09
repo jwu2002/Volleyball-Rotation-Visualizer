@@ -3,7 +3,8 @@ import type { Annotation } from "./components/Court";
 import { PlanAhead } from "./components/PlanAhead";
 import { VisualizerView } from "./components/VisualizerView";
 import type { Lineup } from "./components/StartingLineup";
-import { SaveConfigModal, SaveLineupModal, SavePlanModal, LineupExplorerModal, LiberoModal } from "./components/Modals";
+import { SaveConfigModal, SaveLineupModal, SavePlanModal, LineupExplorerModal, LiberoModal, Toast, ConfirmModal } from "./components/Modals";
+import type { ToastType } from "./components/Modals";
 import "./App.css";
 import "./styles/Modals.css";
 import { auth } from "./firebaseConfig";
@@ -17,6 +18,32 @@ import { useAuth } from "./hooks/useAuth";
 import { useVisualizerState } from "./hooks/useVisualizerState";
 
 function App() {
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [confirm, setConfirm] = useState<{ title: string; message: string; onConfirm: () => void; onCancel: () => void } | null>(null);
+
+  const showToast = useCallback((message: string, type: ToastType = "info") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  const showConfirm = useCallback(
+    (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => {
+      setConfirm({
+        title,
+        message,
+        onConfirm: () => {
+          setConfirm(null);
+          onConfirm();
+        },
+        onCancel: () => {
+          setConfirm(null);
+          onCancel?.();
+        },
+      });
+    },
+    []
+  );
+
   const {
     user,
     email,
@@ -29,10 +56,10 @@ function App() {
     handleEmailSignUp,
     handleEmailSignIn,
     handleSignOut,
-  } = useAuth();
+  } = useAuth({ showToast });
 
   const [activeView, setActiveView] = useState<"court" | "planAhead">("court");
-  const visualizerViewCtx = useVisualizerState(user, activeView);
+  const visualizerViewCtx = useVisualizerState(user, activeView, { showToast, showConfirm });
 
   const [planAheadServeTeam, setPlanAheadServeTeam] = useState<"A" | "B">("A");
   const [planAheadSystemA, setPlanAheadSystemA] = useState<"5-1" | "6-2">("5-1");
@@ -87,7 +114,7 @@ function App() {
       return;
     }
     try {
-      const token = await u.getIdToken();
+      const token = await u.getIdToken(true);
       const list = await fetchSavedPlans(token);
       setSavedPlans(list);
     } catch {
@@ -95,14 +122,15 @@ function App() {
     }
   }, []);
 
+  const userKey = user ? `${user.uid}-${user.isAnonymous}-${user.email ?? ""}` : "";
   useEffect(() => {
     fetchSavedPlansForPlanAhead();
-  }, [user, fetchSavedPlansForPlanAhead]);
+  }, [userKey, fetchSavedPlansForPlanAhead]);
 
   const handleSavePlanSubmit = useCallback(async () => {
     const u = auth.currentUser;
     if (!u) {
-      alert("Sign in to save plans.");
+      showToast("Sign in to save plans.", "info");
       return;
     }
     const name = (visualizerViewCtx.savePlanName || "Unnamed plan").trim();
@@ -117,17 +145,18 @@ function App() {
         rotationB: planAheadRotationB,
         annotations: JSON.parse(JSON.stringify(planAheadAnnotations)) as Annotation[],
       };
-      const token = await u.getIdToken();
+      const token = await u.getIdToken(true);
       await savePlan(u.uid, name, payload, token);
       visualizerViewCtx.setShowSavePlanModal(false);
       visualizerViewCtx.setSavePlanName("");
       await fetchSavedPlansForPlanAhead();
-      alert("Plan saved.");
+      showToast("Plan saved.", "success");
     } catch (err) {
       console.error("Error saving plan:", err);
-      alert("Failed to save plan.");
+      showToast("Failed to save plan.", "error");
     }
   }, [
+    showToast,
     visualizerViewCtx.savePlanName,
     planAheadLineupA,
     planAheadLineupB,
@@ -242,10 +271,17 @@ function App() {
           open={ctx.showSaveModal}
           name={ctx.newName}
           system={ctx.newSystem}
-          rotation={ctx.newRotation}
+          currentRotation={ctx.rotation}
+          saveMode={ctx.saveConfigMode}
+          saveRotationOne={ctx.saveRotationOne}
+          saveRotationsMulti={ctx.saveRotationsMulti}
           onNameChange={ctx.setNewName}
           onSystemChange={ctx.setNewSystem}
-          onRotationChange={ctx.setNewRotation}
+          onSaveModeChange={ctx.setSaveConfigMode}
+          onSaveRotationOneChange={ctx.setSaveRotationOne}
+          onSaveRotationsMultiChange={(index, checked) =>
+            ctx.setSaveRotationsMulti((prev: boolean[]) => prev.map((v: boolean, i: number) => (i === index ? checked : v)))
+          }
           onSave={ctx.handleSaveNewConfig}
           onClose={() => ctx.setShowSaveModal(false)}
         />
@@ -284,6 +320,23 @@ function App() {
           onConfirm={ctx.handleConfirmLiberoSwitch}
           onClose={() => ctx.setShowLiberoModal(false)}
         />
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            visible
+            onDismiss={() => setToast(null)}
+          />
+        )}
+        {confirm && (
+          <ConfirmModal
+            open
+            title={confirm.title}
+            message={confirm.message}
+            onConfirm={confirm.onConfirm}
+            onCancel={confirm.onCancel}
+          />
+        )}
       </div>
     </div>
   );
