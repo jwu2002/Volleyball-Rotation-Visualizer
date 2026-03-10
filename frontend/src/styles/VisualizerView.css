@@ -14,6 +14,10 @@
   gap: 8px;
 }
 
+.control-group-libero {
+  gap: 10px;
+}
+
 .control-divider {
   width: 1px;
   height: 20px;
@@ -60,9 +64,9 @@
 }
 
 .btn-rotation.active {
-  background: var(--accent-muted);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--selection-bg);
+  border-color: var(--selection-border);
+  color: var(--selection-text);
   font-weight: 600;
 }
 
@@ -83,10 +87,105 @@
 }
 
 .btn-system.active {
-  background: var(--accent-muted);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--selection-bg);
+  border-color: var(--selection-border);
+  color: var(--selection-text);
   font-weight: 600;
+}
+
+.segmented-control {
+  display: inline-flex;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  overflow: hidden;
+}
+
+.segmented-control .btn-segment {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  border-right: 1px solid var(--border);
+}
+
+.segmented-control .btn-segment:last-child {
+  border-right: none;
+}
+
+.segmented-control .btn-segment:hover {
+  background: var(--bg-elevated);
+}
+
+.segmented-control .btn-segment.active {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+  font-weight: 600;
+}
+
+.toggle-wrap {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.toggle-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-track {
+  display: block;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  transition: background 0.2s, border-color 0.2s;
+  position: relative;
+}
+
+.toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.2s, background 0.2s;
+}
+
+.toggle-input:checked + .toggle-track {
+  background: var(--selection-bg);
+  border-color: var(--selection-border);
+}
+
+.toggle-input:checked + .toggle-track::after {
+  transform: translateX(16px);
+  background: var(--selection-text);
+}
+
+.toggle-input:focus-visible + .toggle-track {
+  outline: 2px solid var(--selection-border);
+  outline-offset: 2px;
+}
+
+.toggle-input:disabled + .toggle-track {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.toggle-wrap:has(.toggle-input:disabled) {
+  cursor: not-allowed;
 }
 
 .select-config {
@@ -129,9 +228,9 @@
 }
 
 .btn-ghost.active {
-  background: var(--accent-muted);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--selection-bg);
+  border-color: var(--selection-border);
+  color: var(--selection-text);
 }
 
 .btn-ghost:disabled {
@@ -153,12 +252,43 @@
   background: var(--accent-hover);
 }
 
-.current-config-label-wrap {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  padding: 6px 0 8px 2px;
+.court-toolbar-sep-fill {
+  flex: 1;
+  min-width: 12px;
+  width: auto;
+  height: auto;
+  margin: 0;
+  background: none !important;
+}
+
+.court-toolbar-config-badge {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 12px;
+  font-size: 0.75rem;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  max-width: 240px;
+}
+
+.court-toolbar-config-badge-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.court-toolbar-config-badge-value {
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .court-column {
@@ -168,6 +298,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--bg-card);
 }
 
 .out-of-rotation-overlay {
@@ -245,6 +376,9 @@
 .court-toolbar-wrap {
   position: relative;
   flex-shrink: 0;
+  width: 100%;
+  min-width: 0;
+  background: var(--bg-card);
 }
 
 .draw-toolbar-popover {
@@ -481,7 +615,7 @@
   gap: 0;
   padding: 4px 8px;
   min-height: 40px;
-  background: var(--bg-elevated);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius) var(--radius) 0 0;
   border-bottom: none;
@@ -513,8 +647,8 @@
 }
 
 .court-toolbar-btn.active {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--accent);
+  background: var(--selection-bg);
+  color: var(--selection-text);
 }
 
 .court-toolbar-btn-icon.active-subtle {
@@ -596,8 +730,8 @@
 }
 
 .draw-color-swatch.active {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
+  border-color: var(--selection-border);
+  box-shadow: 0 0 0 1px var(--selection-border);
 }
 
 .court-toolbar-check {

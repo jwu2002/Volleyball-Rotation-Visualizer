@@ -187,8 +187,8 @@
 }
 
 .lineup-explorer-item.active {
-  background: rgba(59, 130, 246, 0.2);
-  color: var(--accent);
+  background: var(--selection-bg);
+  color: var(--selection-text);
 }
 
 .lineup-explorer-icon {

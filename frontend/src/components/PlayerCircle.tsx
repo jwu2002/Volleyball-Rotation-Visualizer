@@ -22,9 +22,10 @@ export const PlayerCircle: React.FC<Props> = ({
   label,
   isLocked,
   isFrontRow,
+  isLibero,
   onDragEnd,
 }) => {
-  const isHighlighted = label !== "L" && ["OH1", "MB1", "RS2", "Setter2"].includes(id);
+  const isHighlighted = !isLibero && label !== "L" && ["OH1", "MB1", "RS2", "Setter2"].includes(id);
   const BASE_RADIUS = 30;
   const OUTLINE_RADIUS = 33;
   const BOX_PADDING = 6;

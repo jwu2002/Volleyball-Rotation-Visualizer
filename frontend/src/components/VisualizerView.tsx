@@ -6,10 +6,11 @@ import "../styles/StartingLineup.css";
 import { Court, type CourtRef, type Annotation } from "./Court";
 import { type Lineup, type LineupPositionId, type LineupEntry } from "./StartingLineup";
 import { LineupTable } from "./LineupTable";
+import { Toggle } from "./Toggle";
 import { ExportModal, type ExportOptions } from "./Modals";
 import { default51Rotations, default62Rotations } from "../data/defaultRotations";
 import type { SavedVisualizerConfig, RotationSnapshot } from "../types/savedConfig";
-import { getRoleColorFromId, getRoleDisplayName, normalizePlayerId } from "../utils/visualizerRotations";
+import { getRoleColorFromId, getRoleDisplayName, normalizePlayerId, applyLiberoToBackRowMiddle } from "../utils/visualizerRotations";
 import { getRotationTableLabel } from "../utils/lineupHelpers";
 import { COURT_WIDTH, COURT_HEIGHT, COURT_TOOLBAR_HEIGHT } from "../constants";
 import { auth } from "../firebaseConfig";
@@ -512,7 +513,7 @@ async function buildRotationTablePdf(params: {
   const courtsSectionTop = tableBottomY - gapBelowTables;
   const courtYTopRow = courtsSectionTop - COURT_PDF_H - courtLabelHeight;
   const courtYBottomRow = courtYTopRow - (COURT_ROW_H + courtsGap);
-  [1, 2, 3, 4, 5, 6].forEach((rotNum, idx) => {
+  rotations.forEach((rotNum, idx) => {
     const col = idx % 3;
     const row = Math.floor(idx / 3);
     const courtX = blocksStartX + col * courtBlockW + (courtBlockW - COURT_PDF_W) / 2;
@@ -553,9 +554,20 @@ export function VisualizerView({ ctx }: Props) {
         applyLineup && lineupId
           ? (c.savedLineups.find((l) => l.id === lineupId)?.lineup as Lineup) ?? {}
           : c.lineup;
-      const config = configId ? c.customConfigs.find((cf) => cf.id === configId) : null;
-      const rotationData = config?.rotations ?? c.rotationData;
-      const configName = config?.name ?? (c.currentConfigDisplayName || `Default (${c.system} R${c.rotation})`);
+      let rotationData: RotationSnapshot[];
+      let configName: string;
+      if (configId === "5-1-default" || configId === "6-2-default") {
+        const def = configId === "5-1-default" ? default51Rotations[0] : default62Rotations[0];
+        rotationData = (def?.rotations ?? []).map((snap) => ({
+          players: applyLiberoToBackRowMiddle(JSON.parse(JSON.stringify(snap.players))),
+          annotations: [] as { type: "path" | "arrow"; points: number[]; stroke?: string; pointerAtBeginning?: boolean; pointerAtEnding?: boolean; tension?: number }[],
+        }));
+        configName = def?.name ?? configId;
+      } else {
+        const config = configId ? c.customConfigs.find((cf) => cf.id === configId) : null;
+        rotationData = config?.rotations ?? c.rotationData;
+        configName = config?.name ?? (c.currentConfigDisplayName || `Default (${c.system} R${c.rotation})`);
+      }
       c.setExporting(true);
       try {
         const pdfBytes = await buildRotationTablePdf({
@@ -585,22 +597,22 @@ export function VisualizerView({ ctx }: Props) {
     <>
       <div className="controls">
         <div className="control-group">
-          <label className="control-check">
-            <input
-              type="checkbox"
-              checked={!c.serveReceive}
-              onChange={() => { c.setServeReceive(false); c.handleServeReceiveChange(false); }}
-            />
-            Serve
-          </label>
-          <label className="control-check">
-            <input
-              type="checkbox"
-              checked={c.serveReceive}
-              onChange={() => { c.setServeReceive(true); c.handleServeReceiveChange(true); }}
-            />
-            Receive
-          </label>
+          <div className="segmented-control" role="group" aria-label="Serve or receive">
+            <button
+              type="button"
+              className={`btn-segment ${!c.serveReceive ? "active" : ""}`}
+              onClick={() => { c.setServeReceive(false); c.handleServeReceiveChange(false); }}
+            >
+              Serve
+            </button>
+            <button
+              type="button"
+              className={`btn-segment ${c.serveReceive ? "active" : ""}`}
+              onClick={() => { c.setServeReceive(true); c.handleServeReceiveChange(true); }}
+            >
+              Receive
+            </button>
+          </div>
         </div>
         <span className="control-divider" />
         <div className="control-group">
@@ -618,47 +630,45 @@ export function VisualizerView({ ctx }: Props) {
         </div>
         <span className="control-divider" />
         <div className="control-group">
-          <label className="control-check">
-            <input
-              type="checkbox"
-              checked={c.system === "5-1"}
-              onChange={() => c.handleSystemChange("5-1")}
-            />
-            5-1
-          </label>
-          <label className="control-check">
-            <input
-              type="checkbox"
-              checked={c.system === "6-2"}
-              onChange={() => c.handleSystemChange("6-2")}
-            />
-            6-2
-          </label>
+          <div className="segmented-control" role="group" aria-label="System">
+            <button
+              type="button"
+              className={`btn-segment ${c.system === "5-1" ? "active" : ""}`}
+              onClick={() => c.handleSystemChange("5-1")}
+            >
+              5-1
+            </button>
+            <button
+              type="button"
+              className={`btn-segment ${c.system === "6-2" ? "active" : ""}`}
+              onClick={() => c.handleSystemChange("6-2")}
+            >
+              6-2
+            </button>
+          </div>
         </div>
         <span className="control-divider" />
-        <div className="control-group">
-          <label className="control-check">
-            <input
-              type="checkbox"
-              checked={!!c.currentLibero}
-              onChange={() => {
-                if (c.currentLibero) {
-                  c.setPlayers((prev) =>
-                    prev.map((p) =>
-                      p.id !== c.currentLibero!.id
-                        ? p
-                        : { ...p, label: p.id, color: getRoleColorFromId(p.id), isLibero: false }
-                    )
-                  );
-                } else {
-                  const backRow = c.players.filter((p) => !p.isFrontRow);
-                  c.setLiberoTargetId(backRow[0]?.id ?? null);
-                  c.setShowLiberoModal(true);
-                }
-              }}
-            />
-            Libero
-          </label>
+        <div className="control-group control-group-libero">
+          <span className="control-label">Libero</span>
+          <Toggle
+            checked={!!c.currentLibero}
+            onChange={(checked) => {
+              if (checked) {
+                const backRow = c.players.filter((p) => !p.isFrontRow);
+                c.setLiberoTargetId(backRow[0]?.id ?? null);
+                c.setShowLiberoModal(true);
+              } else if (c.currentLibero) {
+                c.setPlayers((prev) =>
+                  prev.map((p) =>
+                    p.id !== c.currentLibero!.id
+                      ? p
+                      : { ...p, label: p.id, color: getRoleColorFromId(p.id), isLibero: false }
+                  )
+                );
+              }
+            }}
+            aria-label="Libero on or off"
+          />
         </div>
       </div>
 
@@ -666,80 +676,91 @@ export function VisualizerView({ ctx }: Props) {
         <div className="lineup-card">
           <div className="lineup-title">Lineup</div>
           <div className="lineup-saved-row">
-            <select
-              className="lineup-select lineup-select-ellipsis"
-              value={c.selectedLineupId ?? ""}
-              onChange={(e) => c.handleSelectLineup(e.target.value || null)}
-              disabled={!c.user || (c.user?.isAnonymous === true) || c.savedLineups.length === 0}
-              aria-label="Saved lineups"
-              title={selectedLineupName}
-            >
-              <option value="">{!c.user || c.user?.isAnonymous || c.savedLineups.length === 0 ? "No lineup created" : "No lineup selected"}</option>
-              {c.savedLineups.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-            <div className="lineup-actions-dropdown-wrap">
+            <div className="lineup-dropdown-wrap">
               <button
                 type="button"
-                className="court-toolbar-btn lineup-actions-btn"
+                className="lineup-dropdown-trigger"
                 onClick={() => setLineupMenuOpen((o) => !o)}
+                disabled={false}
                 aria-expanded={lineupMenuOpen}
-                aria-haspopup="true"
-                title="Lineup actions"
+                aria-haspopup="listbox"
+                aria-label="Saved lineups"
+                title={c.selectedLineupId ? selectedLineupName : "New lineup"}
               >
-                ▼
+                <span className="lineup-dropdown-trigger-text">
+                  {c.selectedLineupId ? (selectedLineupName || "No lineup selected") : "New lineup"}
+                </span>
+                <span className="lineup-dropdown-trigger-arrow" aria-hidden>▼</span>
               </button>
               {lineupMenuOpen && (
                 <>
                   <div className="court-toolbar-dropdown-backdrop" onClick={() => setLineupMenuOpen(false)} aria-hidden />
-                  <div className="court-toolbar-dropdown lineup-actions-dropdown" role="menu">
-                    <span
-                      className="court-toolbar-dropdown-item-wrap"
-                      onMouseEnter={() => needSignIn && setSignInTooltip("lineup")}
-                      onMouseLeave={() => setSignInTooltip(null)}
-                    >
-                      {needSignIn && <span className="court-toolbar-dropdown-item-overlay" aria-hidden />}
+                  <div className="court-toolbar-dropdown lineup-dropdown-menu" role="listbox">
+                    <div className="lineup-dropdown-item-row">
                       <button
                         type="button"
-                        className="court-toolbar-dropdown-item"
-                        role="menuitem"
-                        disabled={!c.user || c.user.isAnonymous === true}
-                        onClick={() => { c.handleSaveLineupAsClick(); setLineupMenuOpen(false); }}
+                        className={`lineup-dropdown-item ${!c.selectedLineupId ? "active" : ""}`}
+                        role="option"
+                        aria-selected={!c.selectedLineupId}
+                        onClick={() => { c.handleSelectLineup(null); setLineupMenuOpen(false); }}
+                        title="Clear lineup table and start fresh"
                       >
-                        Save as…
+                        <span className="lineup-dropdown-item-name">Create new lineup</span>
                       </button>
-                      {needSignIn && signInTooltip === "lineup" && (
-                        <span className="signin-tooltip signin-tooltip-lineup" role="tooltip">Sign in to save lineup</span>
-                      )}
-                    </span>
-                    <button
-                      type="button"
-                      className="court-toolbar-dropdown-item"
-                      role="menuitem"
-                      disabled={!c.user || c.user.isAnonymous === true || !c.selectedLineupId}
-                      onClick={() => { c.handleSaveLineupClick(); setLineupMenuOpen(false); }}
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      className="court-toolbar-dropdown-item"
-                      role="menuitem"
-                      disabled={!c.user || !c.selectedLineupId}
-                      onClick={() => {
-                        if (c.selectedLineupId) c.handleDeleteLineup(c.selectedLineupId);
-                        setLineupMenuOpen(false);
-                      }}
-                    >
-                      Delete
-                    </button>
+                    </div>
+                    {c.savedLineups.map((l) => (
+                      <div key={l.id} className="lineup-dropdown-item-row">
+                        <button
+                          type="button"
+                          className={`lineup-dropdown-item ${c.selectedLineupId === l.id ? "active" : ""}`}
+                          role="option"
+                          aria-selected={c.selectedLineupId === l.id}
+                          onClick={() => { c.handleSelectLineup(l.id); setLineupMenuOpen(false); }}
+                          title={l.name}
+                        >
+                          <span className="lineup-dropdown-item-name">{l.name}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="lineup-dropdown-delete"
+                          onClick={(e) => { e.stopPropagation(); c.handleDeleteLineup(l.id); setLineupMenuOpen(false); }}
+                          title="Delete lineup"
+                          aria-label={`Delete ${l.name}`}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </>
               )}
             </div>
+            <span
+              className="btn-tooltip-wrap"
+              onMouseEnter={() => needSignIn && setSignInTooltip("lineup")}
+              onMouseLeave={() => setSignInTooltip(null)}
+            >
+              {needSignIn && <span className="btn-tooltip-overlay" aria-hidden />}
+              <button
+                type="button"
+                className="btn-lineup-save"
+                disabled={!c.user || c.user?.isAnonymous === true}
+                onClick={c.handleSaveLineupAsClick}
+              >
+                Save as…
+              </button>
+              {needSignIn && signInTooltip === "lineup" && (
+                <span className="signin-tooltip signin-tooltip-lineup" role="tooltip">Sign in to save lineup</span>
+              )}
+            </span>
+            <button
+              type="button"
+              className="btn-lineup-save"
+              disabled={!c.user || c.user?.isAnonymous === true || !c.selectedLineupId}
+              onClick={c.handleSaveLineupClick}
+            >
+              Save
+            </button>
           </div>
           <LineupTable
             title="Lineup"
@@ -794,10 +815,8 @@ export function VisualizerView({ ctx }: Props) {
                                 let rot = c.rotation;
                                 if (c.customConfigKey.includes("-default")) {
                                   const def = allDefaults.find((d) => d.id === c.customConfigKey);
-                                  if (def) {
-                                    sys = def.system as "5-1" | "6-2";
-                                    rot = def.rotation;
-                                  }
+                                  if (def) sys = def.system as "5-1" | "6-2";
+                                  rot = c.rotation;
                                 } else if (c.customConfigKey.startsWith("custom:")) {
                                   const cfg = c.customConfigs.find((cf) => cf.id === c.customConfigKey.split("custom:")[1]);
                                   if (cfg) {
@@ -911,6 +930,13 @@ export function VisualizerView({ ctx }: Props) {
                 >
                   Export
                 </button>
+              </div>
+              <span className="court-toolbar-sep court-toolbar-sep-fill" aria-hidden />
+              <div className="court-toolbar-config-badge" aria-live="polite">
+                <span className="court-toolbar-config-badge-label">Config</span>
+                <span className="court-toolbar-config-badge-value" title={c.currentConfigDisplayName || `Default (${c.system} R${c.rotation})`}>
+                  {c.currentConfigDisplayName || `Default (${c.system} R${c.rotation})`}
+                </span>
               </div>
             </div>
             {c.drawMode && c.drawPopoverOpen && (
@@ -1036,9 +1062,6 @@ export function VisualizerView({ ctx }: Props) {
               </div>
             )}
           </div>
-          <div className="current-config-label-wrap" aria-live="polite">
-            Current configuration: {c.currentConfigDisplayName || `Default (${c.system} R${c.rotation})`}
-          </div>
           <div className="court-scaled-wrap" ref={c.courtContainerRef}>
             <div
               className="court-scaled-inner"
@@ -1093,7 +1116,11 @@ export function VisualizerView({ ctx }: Props) {
             savedLineups={c.savedLineups}
             exportLineupId={c.exportLineupId}
             onExportLineupIdChange={c.setExportLineupId}
-            customConfigs={c.customConfigs.filter((cf) => cf.id).map((cf) => ({ id: cf.id!, name: cf.name }))}
+            customConfigs={[
+              { id: "5-1-default", name: "5-1 Default" },
+              { id: "6-2-default", name: "6-2 Default" },
+              ...c.customConfigs.filter((cf) => cf.id).map((cf) => ({ id: cf.id!, name: cf.name })),
+            ]}
             exportConfigId={c.exportConfigId}
             onExportConfigIdChange={c.setExportConfigId}
             rotations={c.exportRotations}

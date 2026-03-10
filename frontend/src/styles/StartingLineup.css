@@ -33,6 +33,124 @@
   gap: 8px;
   margin-bottom: 10px;
   align-items: center;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.lineup-dropdown-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.lineup-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.lineup-dropdown-trigger:hover:not(:disabled) {
+  border-color: var(--border-focus);
+}
+
+.lineup-dropdown-trigger:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.lineup-dropdown-trigger:disabled {
+  opacity: 0.8;
+  cursor: not-allowed;
+}
+
+.lineup-dropdown-trigger-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lineup-dropdown-trigger-arrow {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.lineup-dropdown-menu {
+  min-width: 200px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.lineup-dropdown-item-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.lineup-dropdown-item-row .lineup-dropdown-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.lineup-dropdown-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 0.8125rem;
+  color: var(--text);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.lineup-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.lineup-dropdown-item.active {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+
+.lineup-dropdown-item-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lineup-dropdown-delete {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.lineup-dropdown-delete:hover {
+  color: #dc2626;
+  border-color: #dc2626;
 }
 
 .lineup-select {

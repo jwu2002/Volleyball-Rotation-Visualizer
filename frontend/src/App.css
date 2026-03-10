@@ -75,8 +75,8 @@
 }
 
 .view-tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  color: var(--selection-text);
+  border-bottom-color: var(--selection-border);
 }
 
 .view-content-wrap {

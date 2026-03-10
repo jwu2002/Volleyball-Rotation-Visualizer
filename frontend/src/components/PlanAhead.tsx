@@ -4,6 +4,7 @@ import { PlanAheadCourt, type PlanAheadPlayer } from "./PlanAheadCourt";
 import { LINEUP_POSITIONS, type Lineup, type LineupEntry, type LineupPositionId } from "./StartingLineup";
 import { COLORS } from "../data/defaultRotations";
 import { COURT_WIDTH } from "../constants";
+import { Toggle } from "./Toggle";
 
 const PLAN_AHEAD_COURT_WIDTH = COURT_WIDTH;
 
@@ -21,6 +22,10 @@ export type PlanAheadProps = {
   onRotationAChange: (r: number) => void;
   rotationB: number;
   onRotationBChange: (r: number) => void;
+  liberoOnA: boolean;
+  onLiberoAChange: (on: boolean) => void;
+  liberoOnB: boolean;
+  onLiberoBChange: (on: boolean) => void;
   lineupA: Lineup;
   onLineupAChange: (position: LineupPositionId, entry: LineupEntry) => void;
   lineupB: Lineup;
@@ -66,6 +71,10 @@ export const PlanAhead: React.FC<PlanAheadProps> = ({
   onRotationAChange,
   rotationB,
   onRotationBChange,
+  liberoOnA,
+  onLiberoAChange,
+  liberoOnB,
+  onLiberoBChange,
   lineupA,
   onLineupAChange,
   lineupB,
@@ -122,45 +131,51 @@ export const PlanAhead: React.FC<PlanAheadProps> = ({
         </div>
         <div className="plan-ahead-control-group">
           <span className="plan-ahead-label">Team A (US)</span>
-          <label className="control-check">
-            <input
-              type="checkbox"
-              checked={systemA === "5-1"}
-              onChange={() => onSystemAChange("5-1")}
+          <div className="segmented-control" role="group" aria-label="Team A system">
+            <button
+              type="button"
+              className={`btn-segment ${systemA === "5-1" ? "active" : ""}`}
+              onClick={() => onSystemAChange("5-1")}
               aria-label="Team A (US) 5-1"
-            />
-            5-1
-          </label>
-          <label className="control-check">
-            <input
-              type="checkbox"
-              checked={systemA === "6-2"}
-              onChange={() => onSystemAChange("6-2")}
+            >
+              5-1
+            </button>
+            <button
+              type="button"
+              className={`btn-segment ${systemA === "6-2" ? "active" : ""}`}
+              onClick={() => onSystemAChange("6-2")}
               aria-label="Team A (US) 6-2"
-            />
-            6-2
-          </label>
+            >
+              6-2
+            </button>
+          </div>
         </div>
         <div className="plan-ahead-control-group">
           <span className="plan-ahead-label">Team B</span>
-          <label className="control-check">
-            <input
-              type="checkbox"
-              checked={systemB === "5-1"}
-              onChange={() => onSystemBChange("5-1")}
+          <div className="segmented-control" role="group" aria-label="Team B system">
+            <button
+              type="button"
+              className={`btn-segment ${systemB === "5-1" ? "active" : ""}`}
+              onClick={() => onSystemBChange("5-1")}
               aria-label="Team B 5-1"
-            />
-            5-1
-          </label>
-          <label className="control-check">
-            <input
-              type="checkbox"
-              checked={systemB === "6-2"}
-              onChange={() => onSystemBChange("6-2")}
+            >
+              5-1
+            </button>
+            <button
+              type="button"
+              className={`btn-segment ${systemB === "6-2" ? "active" : ""}`}
+              onClick={() => onSystemBChange("6-2")}
               aria-label="Team B 6-2"
-            />
-            6-2
-          </label>
+            >
+              6-2
+            </button>
+          </div>
+        </div>
+        <div className="plan-ahead-control-group plan-ahead-libero-toggles">
+          <span className="plan-ahead-label">Team A Libero:</span>
+          <Toggle checked={liberoOnA} onChange={onLiberoAChange} aria-label="Team A libero on or off" />
+          <span className="plan-ahead-label">Team B Libero:</span>
+          <Toggle checked={liberoOnB} onChange={onLiberoBChange} aria-label="Team B libero on or off" />
         </div>
       </div>
 

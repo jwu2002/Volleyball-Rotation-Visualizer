@@ -12,6 +12,10 @@
   --accent: #0ea5e9;
   --accent-hover: #38bdf8;
   --accent-muted: rgba(14, 165, 233, 0.15);
+  --selection-bg: rgba(255, 255, 255, 0.1);
+  --selection-border: rgba(255, 255, 255, 0.22);
+  --selection-text: var(--text);
+  --checkbox-check: rgba(255, 255, 255, 0.9);
   --success: #22c55e;
   --success-hover: #4ade80;
   --radius-sm: 6px;
@@ -78,6 +82,6 @@ select {
 
 input[type="checkbox"],
 input[type="radio"] {
-  accent-color: var(--accent);
+  accent-color: var(--checkbox-check);
   cursor: pointer;
 }

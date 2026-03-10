@@ -115,7 +115,18 @@ export const rotations62 = generate62Rotations();
 export function applyLiberoToBackRowMiddle(players: Player[]): Player[] {
   const backRowMiddle = players.find((p) => !p.isFrontRow && (p.id === "MB1" || p.id === "MB2"));
   if (!backRowMiddle) return players;
-  const targetId = backRowMiddle.id;
+  return applyLiberoToTarget(players, backRowMiddle.id);
+}
+
+/** Set one back-row player as libero (targetId), or clear libero (targetId null). */
+export function applyLiberoToTarget(players: Player[], targetId: string | null): Player[] {
+  if (!targetId) {
+    return players.map((p) =>
+      p.isLibero || p.label === "L"
+        ? { ...p, label: p.id, color: getRoleColorFromId(p.id), isLibero: false }
+        : { ...p, isLibero: false }
+    );
+  }
   return players.map((p) =>
     p.id === targetId ? { ...p, label: "L", color: COLORS.L, isLibero: true } : { ...p, isLibero: false }
   );
@@ -123,13 +134,12 @@ export function applyLiberoToBackRowMiddle(players: Player[]): Player[] {
 
 export function getDefaultRotationDataInitial(system: "5-1" | "6-2"): RotationSnapshot[] {
   const defaults = system === "6-2" ? default62Rotations : default51Rotations;
-  return [1, 2, 3, 4, 5, 6].map((r) => {
-    const cfg = defaults.find((d) => d.rotation === r);
-    return {
-      players: cfg ? JSON.parse(JSON.stringify(cfg.players)) : [],
-      annotations: [],
-    };
-  });
+  const config = defaults[0];
+  if (!config || !config.rotations?.length) return [];
+  return config.rotations.map((snap) => ({
+    players: JSON.parse(JSON.stringify(snap.players)),
+    annotations: [],
+  }));
 }
 
 export const TOLERANCE = 2;
@@ -153,6 +163,25 @@ const ROLE_DISPLAY_NAMES: Record<string, string> = {
 
 export function getRoleDisplayName(normalizedId: string): string {
   return ROLE_DISPLAY_NAMES[normalizedId] ?? normalizedId;
+}
+
+const ROLE_LONG_NAMES: Record<string, string> = {
+  OH1: "Outside 1",
+  OH2: "Outside 2",
+  RS1: "Right Side 1",
+  RS2: "Right Side 2",
+  MB1: "Middle Blocker 1",
+  MB2: "Middle Blocker 2",
+  S1: "Setter 1",
+  S2: "Setter 2",
+  Setter1: "Setter 1",
+  Setter2: "Setter 2",
+};
+
+/** Long role name for modals (e.g. "Outside 1", "Setter 1"). */
+export function getRoleLongName(id: string): string {
+  const normalized = normalizePlayerId(id);
+  return ROLE_LONG_NAMES[normalized] ?? normalized;
 }
 
 export function playerIdToLineupKey(id: string): string {

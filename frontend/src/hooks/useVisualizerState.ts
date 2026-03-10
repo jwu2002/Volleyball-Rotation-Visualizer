@@ -50,8 +50,8 @@ export function useVisualizerState(
   const [courtContainerReady, setCourtContainerReady] = useState(false);
 
   const [players, setPlayers] = useState<Player[]>(() => {
-    const cfg = default51Rotations.find((d) => d.system === "5-1" && d.rotation === 1);
-    if (cfg) return applyLiberoToBackRowMiddle(JSON.parse(JSON.stringify(cfg.players)));
+    const config = default51Rotations[0];
+    if (config?.rotations?.[0]) return applyLiberoToBackRowMiddle(JSON.parse(JSON.stringify(config.rotations[0].players)));
     return JSON.parse(JSON.stringify(rotations51[0]));
   });
   const [isLocked, setIsLocked] = useState(false);
@@ -233,21 +233,23 @@ export function useVisualizerState(
 
   const getDefaultRotationData = useCallback((sys: "5-1" | "6-2"): RotationSnapshot[] => {
     const defaults = sys === "6-2" ? default62Rotations : default51Rotations;
-    return [1, 2, 3, 4, 5, 6].map((r) => {
-      const cfg = defaults.find((d) => d.rotation === r);
-      const pl = cfg ? applyLiberoToBackRowMiddle(JSON.parse(JSON.stringify(cfg.players))) : [];
-      return { players: pl, annotations: [] as Annotation[] };
-    });
+    const config = defaults[0];
+    if (!config?.rotations?.length) return [];
+    return config.rotations.map((snap) => ({
+      players: applyLiberoToBackRowMiddle(JSON.parse(JSON.stringify(snap.players))) as Player[],
+      annotations: [] as Annotation[],
+    }));
   }, []);
 
   const updatePlayers = useCallback(
     (sys: "5-1" | "6-2", rot: number, useReceiveFormation?: boolean) => {
       const useReceive = useReceiveFormation ?? serveReceive;
       if (useReceive) {
-        const allDefaults = [...default51Rotations, ...default62Rotations];
-        const defaultConfig = allDefaults.find((d) => d.system === sys && d.rotation === rot);
-        if (defaultConfig) {
-          setPlayers(applyLiberoToBackRowMiddle(JSON.parse(JSON.stringify(defaultConfig.players))));
+        const defaults = sys === "6-2" ? default62Rotations : default51Rotations;
+        const config = defaults[0];
+        const snap = config?.rotations?.[rot - 1];
+        if (snap) {
+          setPlayers(applyLiberoToBackRowMiddle(JSON.parse(JSON.stringify(snap.players))));
           return;
         }
       }
@@ -268,9 +270,18 @@ export function useVisualizerState(
       if (value.includes("-default")) {
         const allDefaults = [...default51Rotations, ...default62Rotations];
         const def = allDefaults.find((d) => d.id === value);
-        if (def) setPlayers(JSON.parse(JSON.stringify(def.players)));
-        setAnnotations([]);
-        setServeAnnotationsData(Array.from({ length: 6 }, () => []));
+        if (def?.rotations?.length) {
+          const data = def.rotations.map((snap) => ({
+            players: applyLiberoToBackRowMiddle(JSON.parse(JSON.stringify(snap.players))) as Player[],
+            annotations: [] as Annotation[],
+          }));
+          setRotationData(data);
+          setServeAnnotationsData(Array.from({ length: 6 }, () => []));
+          const snap = data[rotation - 1];
+          setPlayers(JSON.parse(JSON.stringify(snap.players)) as Player[]);
+          setAnnotations([]);
+          setSelectedAnnotationIndices([]);
+        }
         return;
       }
       if (value.startsWith("custom:")) {
@@ -385,7 +396,7 @@ export function useVisualizerState(
         const def = allDefaults.find((d) => d.id === value);
         if (def) {
           setSystem(def.system as "5-1" | "6-2");
-          setRotation(def.rotation);
+          setRotation(1);
         }
       } else if (value.startsWith("custom:")) {
         const id = value.split("custom:")[1];
@@ -603,7 +614,8 @@ export function useVisualizerState(
         if (useReceive) {
           const allDefaults = [...default51Rotations, ...default62Rotations];
           const def = allDefaults.find((d) => d.id === customConfigKey);
-          if (def) setPlayers(applyLiberoToBackRowMiddle(JSON.parse(JSON.stringify(def.players))));
+          const snap = def?.rotations?.[rotation - 1];
+          if (snap) setPlayers(applyLiberoToBackRowMiddle(JSON.parse(JSON.stringify(snap.players))));
           setAnnotations([]);
         } else {
           setPlayers(JSON.parse(JSON.stringify(getRotationSet(system)[rotation - 1])));

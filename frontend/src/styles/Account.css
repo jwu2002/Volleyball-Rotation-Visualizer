@@ -5,7 +5,7 @@
   padding: 8px 12px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: var(--bg-elevated);
+  background: var(--bg-card);
   color: var(--text);
   font-size: 0.8125rem;
   transition: border-color 0.2s, background 0.2s;
@@ -13,7 +13,7 @@
 
 .account-chip:hover {
   border-color: var(--border-focus);
-  background: #222226;
+  background: var(--bg-elevated);
 }
 
 .account-avatar {

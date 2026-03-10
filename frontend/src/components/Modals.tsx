@@ -172,9 +172,10 @@ function getRotationPreviewLabel(
   const d62 = default62Rotations.find((d) => d.id === customConfigKey);
   const d = d51 ?? d62;
   if (!d) return { title: customConfigKey, detail: "—" };
+  const rotCount = d.rotations?.length ?? 0;
   return {
     title: d.name,
-    detail: `System: ${d.system} · Rotation ${(d as { rotation?: number }).rotation ?? "—"}`,
+    detail: `System: ${d.system} · ${rotCount} rotation${rotCount !== 1 ? "s" : ""}`,
   };
 }
 
@@ -296,7 +297,7 @@ export function LiberoModal(props: {
                   checked={props.liberoTargetId === p.id}
                   onChange={() => props.onLiberoTargetChange(p.id)}
                 />
-                <span>{p.label} ({p.id})</span>
+                <span>{p.id} ({p.label})</span>
               </label>
             ))}
           </div>

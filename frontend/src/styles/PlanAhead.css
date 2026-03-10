@@ -50,6 +50,10 @@
   font-size: 0.8125rem;
 }
 
+.plan-ahead-libero-toggles {
+  gap: 4px 14px;
+}
+
 .plan-ahead-label {
   font-size: 0.6875rem;
   color: var(--text-muted);
@@ -253,9 +257,9 @@
 }
 
 .plan-ahead-serve-btn.active {
-  background: var(--team-color, var(--accent));
-  color: #fff;
-  border-color: var(--team-color, var(--accent));
+  background: var(--team-color, var(--selection-bg));
+  color: var(--selection-text);
+  border-color: var(--team-color, var(--selection-border));
 }
 
 .plan-ahead-court-row,
@@ -316,9 +320,9 @@
 }
 
 .plan-ahead-rotation-buttons-row .btn-rotation.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+  background: var(--selection-bg);
+  color: var(--selection-text);
+  border-color: var(--selection-border);
 }
 
 .plan-ahead-court-label-row {
@@ -344,7 +348,7 @@
   overflow-y: auto;
   align-self: stretch;
   align-items: flex-start;
-  justify-content: flex-start;
+  justify-content: center;
   padding-top: 4px;
 }
 

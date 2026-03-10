@@ -7,7 +7,7 @@ import type { ToastType } from "./components/Modals";
 import "./App.css";
 import "./styles/Modals.css";
 import { default51Rotations, default62Rotations } from "./data/defaultRotations";
-import { getRotationSet, applyLiberoToBackRowMiddle } from "./utils/visualizerRotations";
+import { getRotationSet, applyLiberoToBackRowMiddle, applyLiberoToTarget } from "./utils/visualizerRotations";
 import { getDisplayLabel } from "./utils/lineupHelpers";
 import { AppHeader } from "./components/AppHeader";
 import { useAuth } from "./hooks/useAuth";
@@ -66,13 +66,19 @@ function App() {
   const [planAheadRotationB, setPlanAheadRotationB] = useState(1);
   const [planAheadLineupIdA, setPlanAheadLineupIdA] = useState<string | null>(null);
   const [planAheadConfigIdA, setPlanAheadConfigIdA] = useState<string | null>(null);
+  const [planAheadLiberoTargetIdA, setPlanAheadLiberoTargetIdA] = useState<string | null>(null);
+  const [planAheadLiberoTargetIdB, setPlanAheadLiberoTargetIdB] = useState<string | null>(null);
+  const [planAheadLiberoModalTeam, setPlanAheadLiberoModalTeam] = useState<"A" | "B" | null>(null);
+  const [planAheadLiberoDraftA, setPlanAheadLiberoDraftA] = useState<string | null>(null);
+  const [planAheadLiberoDraftB, setPlanAheadLiberoDraftB] = useState<string | null>(null);
 
   const getPlayersForRotation = useCallback(
     (sys: "5-1" | "6-2", rot: number, useReceiveFormation: boolean = true) => {
       if (useReceiveFormation) {
-        const allDefaults = [...default51Rotations, ...default62Rotations];
-        const cfg = allDefaults.find((d) => d.system === sys && d.rotation === rot);
-        if (cfg) return applyLiberoToBackRowMiddle(JSON.parse(JSON.stringify(cfg.players)));
+        const defaults = sys === "6-2" ? default62Rotations : default51Rotations;
+        const config = defaults[0];
+        const snap = config?.rotations?.[rot - 1];
+        if (snap) return applyLiberoToBackRowMiddle(JSON.parse(JSON.stringify(snap.players)));
       }
       const src = getRotationSet(sys);
       return JSON.parse(JSON.stringify(src[rot - 1]));
@@ -81,38 +87,63 @@ function App() {
   );
 
   const customConfigsForPlanAhead = useMemo(
-    () => visualizerViewCtx.customConfigs.filter((c) => c.id).map((c) => ({ id: c.id!, name: c.name })),
+    () => [
+      { id: "5-1-default", name: "5-1 Default" },
+      { id: "6-2-default", name: "6-2 Default" },
+      ...visualizerViewCtx.customConfigs.filter((c) => c.id).map((c) => ({ id: c.id!, name: c.name })),
+    ],
     [visualizerViewCtx.customConfigs]
   );
 
   const planAheadPlayersARotations = useMemo(() => {
     const teamAIsReceiving = planAheadServeTeam === "B";
     const useReceiveForA = teamAIsReceiving;
-    const configA =
+    const defaultConfigA =
+      planAheadConfigIdA === "5-1-default"
+        ? default51Rotations[0]
+        : planAheadConfigIdA === "6-2-default"
+          ? default62Rotations[0]
+          : null;
+    const customConfigA =
       planAheadConfigIdA && teamAIsReceiving
         ? visualizerViewCtx.customConfigs.find((c) => c.id === planAheadConfigIdA)
         : null;
-    if (configA?.rotations?.length) {
-      return [1, 2, 3, 4, 5, 6].map((rot) => {
+    const configA = defaultConfigA ?? customConfigA;
+    let rotations: { id: string; x: number; y: number; color: string; label: string; isFrontRow?: boolean; isLibero?: boolean }[][];
+    if (configA?.rotations?.length && teamAIsReceiving) {
+      rotations = [1, 2, 3, 4, 5, 6].map((rot) => {
         const snap = configA.rotations[rot - 1];
-        const players = snap?.players ?? [];
+        const rawPlayers = snap?.players ?? [];
+        const players = defaultConfigA
+          ? applyLiberoToBackRowMiddle(JSON.parse(JSON.stringify(rawPlayers)))
+          : rawPlayers;
         return players.map((p: { id: string; x: number; y: number; label: string; color?: string; isFrontRow?: boolean; isLibero?: boolean }) => ({
           id: p.id,
           x: p.x,
           y: p.y,
           color: p.color ?? "#666",
-          label: getDisplayLabel(p.id, p.label ?? p.id, planAheadLineupA, true, false),
+          label: getDisplayLabel(p.isLibero ? "L" : p.id, p.label ?? p.id, planAheadLineupA, true, false),
           isFrontRow: p.isFrontRow,
           isLibero: p.isLibero,
         }));
       });
+    } else {
+      rotations = [1, 2, 3, 4, 5, 6].map((rot) => {
+        const base = getPlayersForRotation(planAheadSystemA, rot, useReceiveForA);
+        return base.map((p: { id: string; label: string; [k: string]: unknown }) => ({
+          ...p,
+          label: getDisplayLabel(p.isLibero ? "L" : p.id, p.label, planAheadLineupA, true, false),
+        }));
+      });
     }
-    return [1, 2, 3, 4, 5, 6].map((rot) => {
-      const base = getPlayersForRotation(planAheadSystemA, rot, useReceiveForA);
-      return base.map((p: { id: string; label: string; [k: string]: unknown }) => ({
-        ...p,
-        label: getDisplayLabel(p.id, p.label, planAheadLineupA, true, false),
-      }));
+    if (planAheadLiberoTargetIdA === null) {
+      return rotations.map((players) =>
+        applyLiberoToTarget(players, null).map((p) => ({ ...p, label: getDisplayLabel(p.isLibero ? "L" : p.id, p.label, planAheadLineupA, true, false) }))
+      );
+    }
+    return rotations.map((players) => {
+      const applied = applyLiberoToTarget(players, planAheadLiberoTargetIdA);
+      return applied.map((p) => ({ ...p, label: getDisplayLabel(p.isLibero ? "L" : p.id, p.label, planAheadLineupA, true, false) }));
     });
   }, [
     planAheadServeTeam,
@@ -121,18 +152,28 @@ function App() {
     planAheadLineupA,
     planAheadSystemA,
     getPlayersForRotation,
+    planAheadLiberoTargetIdA,
   ]);
 
   const planAheadPlayersBRotations = useMemo(() => {
     const useReceive = planAheadServeTeam !== "B";
-    return [1, 2, 3, 4, 5, 6].map((rot) => {
+    const rotations = [1, 2, 3, 4, 5, 6].map((rot) => {
       const base = getPlayersForRotation(planAheadSystemB, rot, useReceive);
       return base.map((p: { id: string; label: string; [k: string]: unknown }) => ({
         ...p,
-        label: getDisplayLabel(p.id, p.label, planAheadLineupB, true, false),
+        label: getDisplayLabel(p.isLibero ? "L" : p.id, p.label, planAheadLineupB, true, false),
       }));
     });
-  }, [planAheadServeTeam, planAheadLineupB, planAheadSystemB, getPlayersForRotation]);
+    if (planAheadLiberoTargetIdB === null) {
+      return rotations.map((players) =>
+        applyLiberoToTarget(players, null).map((p) => ({ ...p, label: getDisplayLabel(p.isLibero ? "L" : p.id, p.label, planAheadLineupB, true, false) }))
+      );
+    }
+    return rotations.map((players) => {
+      const applied = applyLiberoToTarget(players, planAheadLiberoTargetIdB);
+      return applied.map((p) => ({ ...p, label: getDisplayLabel(p.isLibero ? "L" : p.id, p.label, planAheadLineupB, true, false) }));
+    });
+  }, [planAheadServeTeam, planAheadLineupB, planAheadSystemB, getPlayersForRotation, planAheadLiberoTargetIdB]);
 
   const planAheadAnnotationsA = useMemo(() => {
     if (planAheadServeTeam !== "B" || !planAheadConfigIdA) return [];
@@ -243,6 +284,30 @@ function App() {
               onRotationAChange={setPlanAheadRotationA}
               rotationB={planAheadRotationB}
               onRotationBChange={setPlanAheadRotationB}
+              liberoOnA={planAheadLiberoTargetIdA !== null}
+              onLiberoAChange={(on: boolean) => {
+                if (on) {
+                  const players = planAheadPlayersARotations[planAheadRotationA - 1] ?? [];
+                  const backRow = players.filter((p) => !p.isFrontRow);
+                  const defaultTarget = planAheadLiberoTargetIdA ?? backRow[0]?.id ?? null;
+                  setPlanAheadLiberoDraftA(defaultTarget);
+                  setPlanAheadLiberoModalTeam("A");
+                } else {
+                  setPlanAheadLiberoTargetIdA(null);
+                }
+              }}
+              liberoOnB={planAheadLiberoTargetIdB !== null}
+              onLiberoBChange={(on: boolean) => {
+                if (on) {
+                  const players = planAheadPlayersBRotations[planAheadRotationB - 1] ?? [];
+                  const backRow = players.filter((p) => !p.isFrontRow);
+                  const defaultTarget = planAheadLiberoTargetIdB ?? backRow[0]?.id ?? null;
+                  setPlanAheadLiberoDraftB(defaultTarget);
+                  setPlanAheadLiberoModalTeam("B");
+                } else {
+                  setPlanAheadLiberoTargetIdB(null);
+                }
+              }}
               lineupA={planAheadLineupA}
               onLineupAChange={(pos, entry) => setPlanAheadLineupA((prev) => ({ ...prev, [pos]: entry }))}
               lineupB={planAheadLineupB}
@@ -323,6 +388,33 @@ function App() {
           onConfirm={ctx.handleConfirmLiberoSwitch}
           onClose={() => ctx.setShowLiberoModal(false)}
         />
+        {planAheadLiberoModalTeam && (() => {
+          const useReceiveA = planAheadServeTeam === "B";
+          const useReceiveB = planAheadServeTeam !== "B";
+          const baseA = getPlayersForRotation(planAheadSystemA, planAheadRotationA, useReceiveA);
+          const baseB = getPlayersForRotation(planAheadSystemB, planAheadRotationB, useReceiveB);
+          const backRowA = applyLiberoToTarget(baseA, null).filter((p: { isFrontRow?: boolean }) => !p.isFrontRow);
+          const backRowB = applyLiberoToTarget(baseB, null).filter((p: { isFrontRow?: boolean }) => !p.isFrontRow);
+          const modalPlayersA = backRowA.map((p: { id: string }) => ({ id: p.id, label: p.id, isFrontRow: false }));
+          const modalPlayersB = backRowB.map((p: { id: string }) => ({ id: p.id, label: p.id, isFrontRow: false }));
+          return (
+          <LiberoModal
+            open
+            players={planAheadLiberoModalTeam === "A" ? modalPlayersA : modalPlayersB}
+            liberoTargetId={planAheadLiberoModalTeam === "A" ? planAheadLiberoDraftA : planAheadLiberoDraftB}
+            onLiberoTargetChange={planAheadLiberoModalTeam === "A" ? setPlanAheadLiberoDraftA : setPlanAheadLiberoDraftB}
+            onConfirm={() => {
+              if (planAheadLiberoModalTeam === "A") {
+                setPlanAheadLiberoTargetIdA(planAheadLiberoDraftA);
+              } else {
+                setPlanAheadLiberoTargetIdB(planAheadLiberoDraftB);
+              }
+              setPlanAheadLiberoModalTeam(null);
+            }}
+            onClose={() => setPlanAheadLiberoModalTeam(null)}
+          />
+          );
+        })()}
         {toast && (
           <Toast
             message={toast.message}
