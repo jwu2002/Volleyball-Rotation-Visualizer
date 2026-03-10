@@ -1,8 +1,6 @@
 # Volleyball Rotation Visualizer
 
-## Summary
-
-A web app for visualizing volleyball rotations. Users can drag players on an interactive court, save lineups and rotation configs (with auth), export rotation sheets as PDF, and use a “Plan ahead” view to compare two teams’ rotations side by side. Built for coaches and players who want to move from paper diagrams to a shareable, exportable tool.
+A web app for visualizing volleyball rotations. Users can drag players on an interactive court, draw arrows to represent routes, save lineups and rotation configs with auth, export rotation sheets as PDF, and use a “Plan ahead” view to compare two teams’ rotations side by side to see potential matchups. Built for coaches and players who want to move from paper diagrams to a digital, exportable tool.
 
 ---
 
@@ -22,11 +20,11 @@ A web app for visualizing volleyball rotations. Users can drag players on an int
 
 ## Features
 
-- **Interactive court** — Drag players on a canvas court, drawing features, and enforce rules of rotation.
-- **Save lineups and configs** — Store lineups and rotation sets in your account (Firebase sign-in); load them anytime.
+- **Interactive court** — Drag players on a canvas court, draw arrows or custom routes, while enforcing rules of volleyball rotations.
+- **Save lineups and configs** — Store lineups and rotation configurations in your account (Firebase sign-in); load them anytime.
 - **Plan ahead** — Compare two teams’ rotations side by side to see blocking match-ups.
 - **PDF export** — Export a one-page rotation sheet (tables + court diagrams) from the visualizer.
-- **Use without signing in** — Try the visualizer and plan-ahead locally; sign in when you want to save or sync.
+- **Use without signing in** — Use the visualizer and plan-ahead without auth; sign in when you want to save or sync.
 
 ---
 
@@ -40,15 +38,14 @@ A web app for visualizing volleyball rotations. Users can drag players on an int
 
 **Back end**
 - FastAPI
-- PostgreSQL (Supabase; Session pooler)
-- Firebase (ID token verification)
-- SQLAlchemy (async + asyncpg), Pydantic
+- PostgreSQL (Supabase)
+- Firebase (Auth)
 
 ---
 
-## Architecture overview (Vercel + Railway)
+## Architecture overview
 
-The app runs as a static front end on Vercel and an API on Railway. When a user opens the site, the browser loads the React app from Vercel. All navigation is client-side: Vercel rewrites non-API paths to `index.html` so the SPA handles routes. When the user signs in, the front end uses Firebase to get an ID token and sends that token with every request to the backend. The backend (FastAPI on Railway) receives requests at `/lineups` and `/configs`, verifies the token with Firebase’s public keys, and then reads or writes data in PostgreSQL on Supabase. Lineups and configs are stored per user (by Firebase `uid`). The database is reached via Supabase’s Session pooler so the connection works over IPv4 from Railway.
+The app runs as a static front end on Vercel and an API on Railway. When a user opens the site, the browser loads the React app from Vercel. When the user signs in, the front end uses Firebase to get an ID token and sends that token with every request to the backend. The backend (FastAPI on Railway) receives requests at `/lineups` and `/configs`, verifies the token with Firebase’s public keys, and then reads or writes data in PostgreSQL on Supabase. Lineups and configs are stored per user (by Firebase `uid`).
 
 ---
 
@@ -73,15 +70,15 @@ The app runs as a static front end on Vercel and an API on Railway. When a user 
 ## How the system works end to end
 
 1. **User opens the app** (Vercel URL). The React app loads; Firebase SDK initializes. If the user is not signed in, they can still use the visualizer and plan-ahead with local state, but saving lineups/configs requires sign-in.
-2. **Sign-in:** User signs in with Firebase (e.g. email/password or Google). The frontend holds the ID token and sends it as `Authorization: Bearer <token>` on every request to the backend.
-3. **Visualizer tab:** User picks a system (5-1 or 6-2) and rotation, loads a lineup (optional), and drags players on the court. They can save the current rotation set as a “config” and save the lineup. Both are sent to the backend and stored in Postgres keyed by `user_id`.
-4. **Plan ahead tab:** User sets two teams (lineups, systems, starting rotations, serve). The view shows two courts side by side for comparison. No save/load of “plans”; it’s session-only.
-5. **Export:** From the visualizer, the user can export a one-page PDF (rotation tables + court diagrams) via the File menu. The PDF is generated in the browser with pdf-lib and either downloaded or previewed in a modal.
-6. **Backend:** Requests to `/lineups` and `/configs` are validated (body via Pydantic, token via Firebase), then the app reads/writes Postgres through SQLAlchemy and returns JSON. CORS is configured so only the Vercel origin (and localhost) can call the API with credentials.
+2. **Sign-in:** User signs in with Firebase (e.g. email/password or Google). The frontend holds the ID token and sends it on every request to the backend.
+3. **Visualizer tab:** User picks between 5-1, 6-2 (types of rotations) and rotation number (1-6), loads a lineup (optional), and drags players on the court. They can save the current rotation set as a “config” and save the lineup. Both are sent to the backend and stored in Postgres keyed by `user_id`.
+4. **Plan ahead tab:** User sets two teams (lineups, systems, starting rotations, serve). The view shows two courts side by side for comparison.
+5. **Export:** From the visualizer, the user can export a one-page PDF (rotation tables + court diagrams). The PDF is generated in the browser with pdf-lib and either downloaded or previewed in a modal.
+6. **Backend:** Requests to `/lineups` and `/configs` are validated, then the app reads/writes Postgres returns JSON.
 
 ---
 
-## Setup instructions
+## Setup instructions for running locally
 
 ### Prerequisites
 
@@ -89,14 +86,13 @@ The app runs as a static front end on Vercel and an API on Railway. When a user 
 - Python 3.12+
 - A Firebase project (Auth enabled)
 - A Supabase project (Postgres)
-- (For production) Vercel and Railway accounts
 
 ### Running locally
 
 1. **Clone and install**
 
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/jwu2002/Volleyball-Rotation-Visualizer.git
    cd Volleyball-Rotation-Visualizer
    cd frontend && npm install
    cd ../backend && python -m venv .venv && .venv\Scripts\activate   # Windows
@@ -107,7 +103,6 @@ The app runs as a static front end on Vercel and an API on Railway. When a user 
 
    - `DATABASE_URL` — Supabase Session pooler connection string (URI with port 6543).
    - `FIREBASE_PROJECT_ID` — Your Firebase project ID (for token verification).
-   - Optional: `CORS_ORIGINS` (e.g. `http://localhost:5173`), `RATE_LIMIT`, `DATABASE_ECHO`.
 
 3. **Frontend env** (in `frontend/.env.local`)
 
@@ -120,18 +115,7 @@ The app runs as a static front end on Vercel and an API on Railway. When a user 
    - Frontend: `cd frontend && npm run dev`
    - Open `http://localhost:5173`.
 
-### Accessing the Vercel front end publicly
 
-- Deploy the frontend to Vercel (connect the repo, build command `npm run build`, output `frontend` or set root to `frontend`).
-- In Vercel, set **Environment Variables** (Production and Preview as needed):
-  - `VITE_API_URL` = your Railway backend URL (e.g. `https://your-app.up.railway.app`).
-  - All `VITE_FIREBASE_*` variables same as local.
-- On **Railway**, set:
-  - `DATABASE_URL` (Supabase Session pooler URI).
-  - `FIREBASE_PROJECT_ID`.
-  - `CORS_ORIGINS` = your Vercel URL (e.g. `https://your-app.vercel.app`).
-
-Redeploy the frontend after changing env vars so the build picks them up.
 
 ### Demo account
 
@@ -143,7 +127,12 @@ Create demo account
 
 ### Understanding 5-1 rotations
 
-Put video / explanation here
+Quick video on 5-1:
+
+https://www.youtube.com/watch?v=pi7Lf6uO7dE
+
+Credit: https://www.youtube.com/@SDVolleyballVideos
+
 
 ### From paper to app
 
