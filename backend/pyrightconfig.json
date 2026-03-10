@@ -1,5 +1,0 @@
-{
-  "include": ["api", "config.py", "db", "main.py", "models", "schemas"],
-  "reportMissingImports": true,
-  "reportMissingModuleSource": false
-}

@@ -12,21 +12,13 @@ from slowapi.middleware import SlowAPIMiddleware
 from api.deps import limiter
 from api.routes import configs, lineups
 from config import parse_cors_origins, settings
-from db.base import Base
 from db.session import engine
-from models import Lineup, VisualizerConfig
 
 logger = logging.getLogger(__name__)
 
 
-async def create_tables():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await create_tables()
     if settings.firebase_project_id:
         logger.info("Firebase auth: project_id=%s (must match frontend)", settings.firebase_project_id)
     else:

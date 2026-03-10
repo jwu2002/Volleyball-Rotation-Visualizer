@@ -119,3 +119,4 @@ async def delete_config(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found")
     await db.delete(row)
     await db.flush()
+

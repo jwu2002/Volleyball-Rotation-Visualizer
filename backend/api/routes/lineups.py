@@ -112,3 +112,4 @@ async def delete_lineup(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lineup not found")
     await db.delete(row)
     await db.flush()
+
