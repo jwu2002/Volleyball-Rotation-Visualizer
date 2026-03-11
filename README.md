@@ -1,150 +1,225 @@
 # Volleyball Rotation Visualizer
 
-A web app for visualizing volleyball rotations. Users can drag players on an interactive court, draw arrows to represent routes, save lineups and rotation configs with auth, export rotation sheets as PDF, and use a “Plan ahead” view to compare two teams’ rotations side by side to see potential matchups. Built for coaches and players who want to move from paper diagrams to a digital, exportable tool.
+A full-stack web app for volleyball coaches and players to visualize, customize, and save rotation diagrams — replacing paper and whiteboard sketches with an interactive, exportable digital tool.
+
+**Live demo:** https://volleyballrotationsvisualizer.vercel.app/
+**Demo account:** Available on request
 
 ---
 
 ## Table of contents
 
+- [The problem](#the-problem)
+- [Examples](#examples)
 - [Features](#features)
 - [Tech stack](#tech-stack)
-- [Architecture overview](#architecture-overview-vercel--railway)
-- [Key design decisions](#key-frontend-and-backend-design-decisions)
-- [How it works](#how-the-system-works-end-to-end)
+- [Architecture overview](#architecture-overview)
+- [Key design decisions](#key-design-decisions)
+- [How it works end-to-end](#how-it-works-end-to-end)
 - [Setup instructions](#setup-instructions)
-- [Examples / How to use](#examples--how-to-use)
 - [Project structure](#project-structure)
-- [Environment variables reference](#environment-variables-reference)
+- [Environment variables](#environment-variables)
+- [Authorship](#authorship)
+- [Known limitations and future improvements](#known-limitations-and-future-improvements)
 
 ---
 
+## The problem
+
+Volleyball teams run structured rotation systems (5-1, 6-2) but frequently need to customize them — adjusting for weak rotations, opponent matchups, or specific player combinations. Coaches today draw these diagrams on paper or whiteboards every season, from scratch, with no way to save, reuse, or share them.
+
+This tool lets coaches build custom rotation diagrams interactively, preview matchups against an opponent's lineup, and export everything as a one-page PDF — so diagrams created this season are reusable next season.
+
+---
+
+## Examples
+
+### Visualizer
+
+Here is a real plan that my coach sent to me as a player:
+
+<img src="images/example_plan.jpg" width="700">
+
 ## Features
 
-- **Interactive court** — Drag players on a canvas court, draw arrows or custom routes, while enforcing rules of volleyball rotations.
-- **Save lineups and configs** — Store lineups and rotation configurations in your account (Firebase sign-in); load them anytime.
-- **Plan ahead** — Compare two teams’ rotations side by side to see blocking match-ups.
-- **PDF export** — Export a one-page rotation sheet (tables + court diagrams) from the visualizer.
-- **Use without signing in** — Use the visualizer and plan-ahead without auth; sign in when you want to save or sync.
+- **Interactive court** — Drag players on a canvas court, draw arrows or custom routes, with rotation rule enforcement (players cannot swap with non-diagonal neighbors)
+- **5-1 and 6-2 support** — Switch between the two universally used rotation systems, with all 6 rotations per system
+- **Plan ahead** — Compare two teams' rotations side by side to preview blocking and serving matchups
+- **Save lineups and configs** — Store and reload lineups and rotation configurations per account
+- **PDF export** — Export a one-page rotation sheet (tables + court diagrams) directly from the browser
+- **Works without an account** — Full visualizer and plan-ahead available without sign-in; sign in to save and sync
 
 ---
 
 ## Tech stack
 
-**Front end**
-- React, TypeScript, Vite
-- react-konva (canvas court)
-- Firebase Auth
-- pdf-lib (PDF export)
-
-**Back end**
-- FastAPI
-- PostgreSQL (Supabase)
-- Firebase (Auth)
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React, TypeScript, Vite |
+| Canvas | react-konva |
+| Auth | Firebase Auth |
+| PDF export | pdf-lib |
+| Backend | FastAPI |
+| Database | PostgreSQL via Supabase |
+| Frontend hosting | Vercel |
+| Backend hosting | Railway |
 
 ---
 
 ## Architecture overview
 
-The app runs as a static front end on Vercel and an API on Railway. When a user opens the site, the browser loads the React app from Vercel. When the user signs in, the front end uses Firebase to get an ID token and sends that token with every request to the backend. The backend (FastAPI on Railway) receives requests at `/lineups` and `/configs`, verifies the token with Firebase’s public keys, and then reads or writes data in PostgreSQL on Supabase. Lineups and configs are stored per user (by Firebase `uid`).
+```
+Browser (Vercel)
+│
+├── React (TypeScript + Vite)
+│   ├── react-konva court (canvas)
+│   ├── Firebase Auth SDK (ID token management)
+│   └── pdf-lib (PDF generation, client-side)
+│
+└── Firebase token on every API request
+        │
+        ▼
+Railway (FastAPI)
+├── Firebase JWT verification (stateless, via JWKS)
+└── SQLAlchemy
+        │
+        ▼
+Supabase (PostgreSQL)
+├── lineups (user_id, name, lineup JSONB)
+└── visualizer_configs (user_id, name, system, rotations JSONB)
+```
+
+The frontend is a static single page application deployed on Vercel. When the user signs in, Firebase issues an ID token that the frontend attaches to every backend request. The backend verifies the token against Firebase's public endpoint — no sessions. Data is stored in PostgreSQL on Supabase, keyed by Firebase `uid`.
 
 ---
 
-## Key frontend and backend design decisions
+## Key design decisions
 
-**Frontend**
+### react-konva for the court
 
-- **Single-page app:** One React app; routing is client-side. Vercel rewrites ensure non-API paths serve `index.html`.
-- **Canvas court:** The court is drawn with **react-konva** (Rect, Line, Circle) instead of an image asset, so it scales and stays sharp; players are draggable nodes. Why React-Konva? Using react-konva allowed the court to be rendered as vector shapes instead of a static image. This makes the court scalable and allows player nodes to be draggable without complex  calculations.
-- **State:** Main UI state lives in a custom hook (`useVisualizerState`) and is passed via context to the visualizer and plan-ahead views. Lineups and configs are synced with the backend when the user is signed in; otherwise they can use local-only storage for demos.
-- **API client:** One `api/client.ts` that builds the request URL from `VITE_API_URL`, sends the Firebase token, and handles JSON and errors. Same code path for local (localhost backend) and production (Railway).
+The court needed to support draggable players, freehand and arrow drawing, and clean rendering on both desktop and mobile browsers. I chose react-konva (a React binding for the Konva canvas library) over SVG or DOM-based approaches because draggability is built in (no need for manual hit testing or coordinate math), arrow drawing is just a state update as the user moves the mouse pointer, and the react-konva cavas is vector based, allowing for clean resizing with no pixelation, very important since I want my app to be used on mobile.
 
-**Backend**
+### Firebase Auth over other Auth methods:
 
-- **Auth:** Every protected route depends on `get_current_user_id`, which validates the Bearer token with Firebase’s public keys and returns the `uid`. No sessions; stateless JWT verification.
-- **ORM:** SQLAlchemy with asyncpg. Two tables: `lineups` (user_id, name, payload JSONB, show_number, show_name) and `visualizer_configs` (user_id, name, system, rotations JSONB). Tables are created and managed in Supabase; the app does not run `create_all` at startup.
-- **Schemas:** Pydantic models for request/response (Create, Update, Out) with validation and camelCase serialization for the frontend. Names and lengths are validated; optional fields for updates.
-- **Rate limiting:** SlowAPI with a default of 20 requests per minute per client IP to reduce abuse.
+- Firebase's ID tokens are standard JWTs verified statically against Firebase's JWKS public keys. The backend stays fully stateless. This greatly simplifies my database and backend, as no session information is needed.
+- Firebase handles token refresh automatically in the SDK, email verification, password reset, and Google sign-in with minimal configuration.
+
+### PostgreSQL + FastAPI over a Firebase-only backend
+
+Firebase's Firestore is a good fit for simple, denormalized document data. Rotation data has relational structure — users, lineups, configs, and eventually teams and shared rotations. Postgres handles this cleanly with querying, and indexing. With roughly 50,000 volleyball coaches in the US as a potential user base, a relational database is the right long-term foundation.
+
+### JSONB for rotation and lineup payloads
+
+Rotation data (player positions per rotation) and lineup data are semi-structured and may evolve as features are added. Storing them as JSONB in Postgres gives flexibility without losing the ability to query, index, or filter on structured fields like `user_id`, `name`, or `system`.
+
+### Client-side PDF generation
+
+PDF export is handled entirely in the browser with `pdf-lib`. This keeps the backend stateless and avoids sending canvas data or large payloads over the network. The tradeoff is limited control over layout complexity, but for a one-page rotation sheet it's sufficient.
+
+### Managed infrastructure
+
+Vercel (frontend), Railway (backend), and Supabase (database) were chosen for minimal operational overhead and free tiers. The tradeoff is reduced control and customization. At current scale this is good enough; migrating to self-managed infrastructure something I will do if scale requires it.
 
 ---
 
-## How the system works end to end
+## How it works end-to-end
 
-1. **User opens the app** (Vercel URL). The React app loads; Firebase SDK initializes. If the user is not signed in, they can still use the visualizer and plan-ahead with local state, but saving lineups/configs requires sign-in.
-2. **Sign-in:** User signs in with Firebase (e.g. email/password or Google). The frontend holds the ID token and sends it on every request to the backend.
-3. **Visualizer tab:** User picks between 5-1, 6-2 (types of rotations) and rotation number (1-6), loads a lineup (optional), and drags players on the court. They can save the current rotation set as a “config” and save the lineup. Both are sent to the backend and stored in Postgres keyed by `user_id`.
-4. **Plan ahead tab:** User sets two teams (lineups, systems, starting rotations, serve). The view shows two courts side by side for comparison.
-5. **Export:** From the visualizer, the user can export a one-page PDF (rotation tables + court diagrams). The PDF is generated in the browser with pdf-lib and either downloaded or previewed in a modal.
-6. **Backend:** Requests to `/lineups` and `/configs` are validated, then the app reads/writes Postgres returns JSON.
+1. Browser fetches the React app from Vercel. Firebase SDK initializes and restores auth state from local storage if the user was previously signed in.
+2. User can use the visualizer and plan-ahead immediately.
+3. When a user successfully authenticates, Firebase issues an ID token (JWT, 1-hour expiry, auto-refreshed by the SDK). The frontend stores this and attaches it as a Bearer token on every API request.
+4. User selects a system (5-1 or 6-2) and rotation (1–6), optionally loads a saved lineup, and drags players on the court. Rotation rules are enforced client-side. Annotations (arrows, freehand paths) are stored in component state.
+5. Lineup and config saves hit `POST /lineups` or `POST /configs`. The backend verifies the token, extracts `uid`, and writes to Postgres. Subsequent loads hit `GET /lineups` or `GET /configs`, filtered by `uid`.
+6. In the plan ahead tab, the user sets two teams (lineup, system, starting rotation, serve side). Two read-only courts render side by side, showing blocking and serving matchups.
+7. `pdf-lib` renders the current rotation tables and court diagrams in the browser and either downloads the PDF or shows a preview.
 
 ---
 
-## Setup instructions for running locally
+## Setup instructions
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 18+
 - Python 3.12+
-- A Firebase project (Auth enabled)
-- A Supabase project (Postgres)
+- A Firebase project with Auth enabled
+- A Supabase project with the tables below created
 
-### Running locally
+### Database setup (Supabase)
 
-1. **Clone and install**
+Run in the Supabase SQL editor:
 
-   ```bash
-   git clone https://github.com/jwu2002/Volleyball-Rotation-Visualizer.git
-   cd Volleyball-Rotation-Visualizer
-   cd frontend && npm install
-   cd ../backend && python -m venv .venv && .venv\Scripts\activate   # Windows
-   pip install -r requirements.txt
-   ```
+```sql
+create table lineups (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  name text not null,
+  payload jsonb not null,
+  show_number boolean default true,
+  show_name boolean default false,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
 
-2. **Backend env** (in `backend/.env`)
+create table visualizer_configs (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  name text not null,
+  system text not null,
+  rotations jsonb not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+```
 
-   - `DATABASE_URL` — Supabase Session pooler connection string (URI with port 6543).
-   - `FIREBASE_PROJECT_ID` — Your Firebase project ID (for token verification).
+### Install and run
 
-3. **Frontend env** (in `frontend/.env.local`)
+```bash
+git clone https://github.com/jwu2002/Volleyball-Rotation-Visualizer.git
+cd Volleyball-Rotation-Visualizer
 
-   - `VITE_API_URL` — Backend URL, e.g. `http://localhost:8000`.
-   - Firebase: `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`, `VITE_FIREBASE_MEASUREMENT_ID` (from Firebase Console).
+# Frontend
+cd frontend && npm install
 
-4. **Run**
+# Backend
+cd ../backend
+python -m venv .venv
+.venv\Scripts\activate     # Windows
+# source .venv/bin/activate  # macOS/Linux
+pip install -r requirements.txt
+```
 
-   - Backend: `cd backend && uvicorn main:app --reload --port 8000`
-   - Frontend: `cd frontend && npm run dev`
-   - Open `http://localhost:5173`.
+### Environment variables
 
+**`backend/.env`**
+```
+DATABASE_URL=postgresql+asyncpg://...  # Supabase connection string
+FIREBASE_PROJECT_ID=your-project-id
+CORS_ORIGINS=http://localhost:5173
+RATE_LIMIT=20/minute
+```
 
+**`frontend/.env.local`**
+```
+VITE_API_URL=http://localhost:8000
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=...
+VITE_FIREBASE_PROJECT_ID=...
+VITE_FIREBASE_STORAGE_BUCKET=...
+VITE_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_FIREBASE_APP_ID=...
+VITE_FIREBASE_MEASUREMENT_ID=...
+```
 
-### Demo account
+### Run
 
-Create demo account
+```bash
+# Backend
+cd backend && uvicorn main:app --reload --port 8000
 
----
+# Frontend (separate terminal)
+cd frontend && npm run dev
+```
 
-## Examples / How to use
-
-### Understanding 5-1 rotations
-
-Quick video on 5-1:
-
-https://www.youtube.com/watch?v=pi7Lf6uO7dE
-
-Credit: https://www.youtube.com/@SDVolleyballVideos
-
-
-### From paper to app
-
-Put image here
-
-### What you can do in the app
-
-Put screenshot here
-
-### PDF export
-
-The app can export a one-page rotation sheet (tables + court diagrams) from the Visualizer tab via **File → Export**. Preview in the modal, then save the PDF.
+Open `http://localhost:5173`.
 
 ---
 
@@ -152,48 +227,52 @@ The app can export a one-page rotation sheet (tables + court diagrams) from the 
 
 ```
 Volleyball-Rotation-Visualizer/
-├── frontend/                 # React + Vite
+├── frontend/
 │   ├── src/
 │   │   ├── api/              # Backend API client (lineups, configs)
 │   │   ├── components/       # Court, PlanAhead, Modals, AppHeader, etc.
+│   │   ├── contexts/         # CourtContext, LineupContext, AnnotationsContext, etc.
 │   │   ├── data/             # Default 5-1 / 6-2 rotation data
-│   │   ├── hooks/            # useAuth, useVisualizerState
-│   │   ├── storage/          # configStorage (sync with backend + local fallback)
+│   │   ├── hooks/            # useAuth, useCourtState, useAnnotationsState, etc.
 │   │   ├── styles/           # CSS per view/component
 │   │   ├── types/            # savedConfig types
-│   │   ├── utils/            # lineupHelpers, visualizerRotations, etc.
+│   │   ├── utils/            # lineupHelpers, visualizerRotations, exportPdf, etc.
 │   │   ├── App.tsx
-│   │   ├── main.tsx
 │   │   ├── firebaseConfig.ts
 │   │   └── constants.ts
-│   ├── index.html
-│   ├── vercel.json           
+│   ├── vercel.json
 │   └── package.json
-├── backend/                  # FastAPI
+├── backend/
 │   ├── api/
-│   │   ├── deps.py           # Auth, slowapi rate limiter
+│   │   ├── deps.py           # Auth dependency
 │   │   └── routes/           # lineups.py, configs.py
-│   ├── config.py             # Settings from env
 │   ├── db/                   # session.py, base.py
-│   ├── models/               # SQLAlchemy ORM: Lineup, VisualizerConfig
-│   ├── schemas/              # Create, Update
-│   ├── main.py
-│   └── requirements.txt
+│   ├── models/               # Lineup, VisualizerConfig ORM models
+│   ├── schemas/              # Pydantic Create / Update / Out schemas
+│   ├── config.py
+│   └── main.py
 └── README.md
 ```
 
 ---
 
-## Environment variables reference
+## Environment variables
 
 | Variable | Where | Purpose |
-|----------|--------|---------|
-| `VITE_API_URL` | Frontend | Backend base URL (e.g. `http://localhost:8000` or Railway URL). |
-| `VITE_FIREBASE_*` | Frontend | Firebase project config (apiKey, authDomain, projectId, etc.). |
-| `DATABASE_URL` | Backend | Postgres connection string (Supabase Session pooler recommended). |
-| `FIREBASE_PROJECT_ID` | Backend | Firebase project ID for ID token verification. |
-| `CORS_ORIGINS` | Backend | Comma-separated allowed origins (e.g. Vercel URL). |
-| `RATE_LIMIT` | Backend | Optional; default `20/minute`. |
+|----------|-------|---------|
+| `VITE_API_URL` | Frontend | Backend base URL |
+| `VITE_FIREBASE_*` | Frontend | Firebase project config (7 vars from Firebase Console) |
+| `DATABASE_URL` | Backend | Postgres connection string (Supabase session pooler, port 6543) |
+| `FIREBASE_PROJECT_ID` | Backend | Firebase project ID for JWT verification |
+| `CORS_ORIGINS` | Backend | Comma-separated allowed origins (e.g. Vercel URL) |
+| `RATE_LIMIT` | Backend | Default `20/minute` |
 
 ---
 
+## Future improvements
+
+**Future improvements**
+- Live game tracking — track score and rotation in real time during a match
+- Mobile app — React Native port for iOS and Android, apps on App store and Google play store
+- Team accounts — share lineups and configs across a coaching staff
+- Opponent scouting — save and reuse opponent lineups across seasons
