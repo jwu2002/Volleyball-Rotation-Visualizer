@@ -1,6 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
 import type { RefObject } from "react";
-import { PDFDocument, StandardFonts, grayscale } from "pdf-lib";
 import "../styles/VisualizerView.css";
 import "../styles/StartingLineup.css";
 import { Court, type CourtRef, type Annotation } from "./Court";
@@ -10,10 +9,17 @@ import { Toggle } from "./Toggle";
 import { ExportModal, type ExportOptions } from "./Modals";
 import { default51Rotations, default62Rotations } from "../data/defaultRotations";
 import type { SavedVisualizerConfig, RotationSnapshot } from "../types/savedConfig";
-import { getRoleColorFromId, getRoleDisplayName, normalizePlayerId, applyLiberoToBackRowMiddle } from "../utils/visualizerRotations";
-import { getRotationTableLabel } from "../utils/lineupHelpers";
+import { getRoleColorFromId, applyLiberoToBackRowMiddle } from "../utils/visualizerRotations";
+import { buildRotationTablePdf } from "../utils/exportPdf";
 import { COURT_WIDTH, COURT_HEIGHT, COURT_TOOLBAR_HEIGHT } from "../constants";
 import { auth } from "../firebaseConfig";
+import { useCourtContext } from "../contexts/CourtContext";
+import { useLineupContext } from "../contexts/LineupContext";
+import { useConfigSaveContext } from "../contexts/ConfigSaveContext";
+import { useAnnotationsContext } from "../contexts/AnnotationsContext";
+import { useExportContext } from "../contexts/ExportContext";
+import { useVisualizerContext } from "../contexts/VisualizerContext";
+import type { AnnotationsContextValue } from "../contexts/AnnotationsContext";
 
 export type VisualizerPlayer = {
   id: string;
@@ -145,415 +151,49 @@ export type VisualizerViewContext = {
 
 const DRAW_COLORS = ["#1a1a1a", "#e11d48", "#2563eb", "#16a34a"];
 
-function undoClick(ctx: VisualizerViewContext) {
-  if (ctx.undoStackRef.current.length) {
-    ctx.redoStackRef.current.push(JSON.parse(JSON.stringify(ctx.annotations)));
-    ctx.setRedoStackLength(ctx.redoStackRef.current.length);
-    ctx.setAnnotations(ctx.undoStackRef.current.pop()!);
-    ctx.setUndoStackLength(ctx.undoStackRef.current.length);
-    ctx.setSelectedAnnotationIndices([]);
+function undoClick(ann: AnnotationsContextValue) {
+  if (ann.undoStackRef.current.length) {
+    ann.redoStackRef.current.push(JSON.parse(JSON.stringify(ann.annotations)));
+    ann.setRedoStackLength(ann.redoStackRef.current.length);
+    ann.setAnnotations(ann.undoStackRef.current.pop()!);
+    ann.setUndoStackLength(ann.undoStackRef.current.length);
+    ann.setSelectedAnnotationIndices([]);
   }
 }
 
-function redoClick(ctx: VisualizerViewContext) {
-  if (ctx.redoStackRef.current.length) {
-    ctx.undoStackRef.current.push(JSON.parse(JSON.stringify(ctx.annotations)));
-    ctx.setUndoStackLength(ctx.undoStackRef.current.length);
-    ctx.setAnnotations(ctx.redoStackRef.current.pop()!);
-    ctx.setRedoStackLength(ctx.redoStackRef.current.length);
-    ctx.setSelectedAnnotationIndices([]);
+function redoClick(ann: AnnotationsContextValue) {
+  if (ann.redoStackRef.current.length) {
+    ann.undoStackRef.current.push(JSON.parse(JSON.stringify(ann.annotations)));
+    ann.setUndoStackLength(ann.undoStackRef.current.length);
+    ann.setAnnotations(ann.redoStackRef.current.pop()!);
+    ann.setRedoStackLength(ann.redoStackRef.current.length);
+    ann.setSelectedAnnotationIndices([]);
   }
 }
 
-type Props = { ctx: VisualizerViewContext };
+export function VisualizerView() {
+  const court = useCourtContext();
+  const lineup = useLineupContext();
+  const configSave = useConfigSaveContext();
+  const annotations = useAnnotationsContext();
+  const exportCtx = useExportContext();
+  const visualizer = useVisualizerContext();
 
-function playersInCourtOrder<T extends { x: number; isFrontRow?: boolean }>(players: T[]): T[] {
-  return [...players].sort((a, b) => {
-    const aFront = a.isFrontRow ?? false;
-    const bFront = b.isFrontRow ?? false;
-    if (aFront !== bFront) return aFront ? -1 : 1;
-    return a.x - b.x;
-  });
-}
-
-const TABLE_BORDER = grayscale(0.35);
-const LINE_THICKNESS = 0.5;
-
-const POSITION_GROUPS: { title: string; positions: LineupPositionId[] }[] = [
-  { title: "Setters", positions: ["S1", "S2"] },
-  { title: "Liberos", positions: ["L"] },
-  { title: "Middles", positions: ["MB1", "MB2"] },
-  { title: "Outsides", positions: ["OH1", "OH2"] },
-  { title: "Opposites", positions: ["RS1", "RS2"] },
-];
-
-function getPositionGroupRow(entry: LineupEntry | undefined): { number: string; name: string } {
-  if (!entry) return { number: "None", name: "None" };
-  const num = entry.number?.trim() || "None";
-  const name = [entry.firstName?.trim(), entry.lastName?.trim()].filter(Boolean).join(" ").trim() || "None";
-  return { number: num, name };
-}
-
-const POSITION_GROUP_ROW_H = 12;
-const POSITION_GROUP_HEADER_H = 10;
-const POSITION_GROUP_TITLE_H = 10;
-
-function drawPositionGroupTable(
-  page: import("pdf-lib").PDFPage,
-  font: import("pdf-lib").PDFFont,
-  lineup: Lineup,
-  group: { title: string; positions: LineupPositionId[] },
-  opts: { x: number; y: number; width: number; fontSize: number }
-) {
-  const { x, y, width, fontSize } = opts;
-  const col1W = width * 0.5;
-  const rowCount = Math.max(1, group.positions.length);
-  const tableH = POSITION_GROUP_TITLE_H + POSITION_GROUP_HEADER_H + rowCount * POSITION_GROUP_ROW_H;
-  const w = width;
-  page.setFont(font);
-  page.drawRectangle({
-    x,
-    y,
-    width: w,
-    height: tableH,
-    borderWidth: LINE_THICKNESS,
-    borderColor: TABLE_BORDER,
-  });
-  page.drawLine({
-    start: { x, y: y + tableH - POSITION_GROUP_TITLE_H },
-    end: { x: x + w, y: y + tableH - POSITION_GROUP_TITLE_H },
-    thickness: LINE_THICKNESS,
-    color: TABLE_BORDER,
-  });
-  page.drawLine({
-    start: { x, y: y + tableH - POSITION_GROUP_TITLE_H - POSITION_GROUP_HEADER_H },
-    end: { x: x + w, y: y + tableH - POSITION_GROUP_TITLE_H - POSITION_GROUP_HEADER_H },
-    thickness: LINE_THICKNESS,
-    color: TABLE_BORDER,
-  });
-  page.drawLine({
-    start: { x: x + col1W, y },
-    end: { x: x + col1W, y: y + tableH },
-    thickness: LINE_THICKNESS,
-    color: TABLE_BORDER,
-  });
-  const pad = 3;
-  page.setFontSize(fontSize + 1);
-  page.drawText(group.title, { x: x + pad, y: y + tableH - POSITION_GROUP_TITLE_H + pad, size: fontSize + 1 });
-  page.setFontSize(fontSize);
-  page.drawText("Player Number", { x: x + pad, y: y + tableH - POSITION_GROUP_TITLE_H - POSITION_GROUP_HEADER_H + pad, size: fontSize });
-  page.drawText("Player Name", { x: x + col1W + pad, y: y + tableH - POSITION_GROUP_TITLE_H - POSITION_GROUP_HEADER_H + pad, size: fontSize });
-  group.positions.forEach((posId, i) => {
-    const entry = lineup[posId];
-    const { number, name } = getPositionGroupRow(entry);
-    const rowY = y + tableH - POSITION_GROUP_TITLE_H - POSITION_GROUP_HEADER_H - (i + 1) * POSITION_GROUP_ROW_H + pad;
-    page.drawText(number, { x: x + pad, y: rowY, size: fontSize });
-    page.drawText(name, { x: x + col1W + pad, y: rowY, size: fontSize });
-  });
-}
-
-function drawPositionGroupsRow(
-  page: import("pdf-lib").PDFPage,
-  font: import("pdf-lib").PDFFont,
-  lineup: Lineup,
-  opts: { x: number; y: number; totalWidth: number; gap: number; fontSize: number }
-): number {
-  const { x, y, totalWidth, gap, fontSize } = opts;
-  const n = POSITION_GROUPS.length;
-  const tableW = (totalWidth - (n - 1) * gap) / n;
-  let maxH = 0;
-  POSITION_GROUPS.forEach((group, i) => {
-    const gx = x + i * (tableW + gap);
-    const rowCount = Math.max(1, group.positions.length);
-    const h = POSITION_GROUP_TITLE_H + POSITION_GROUP_HEADER_H + rowCount * POSITION_GROUP_ROW_H;
-    if (h > maxH) maxH = h;
-    drawPositionGroupTable(page, font, lineup, group, { x: gx, y, width: tableW, fontSize });
-  });
-  return maxH;
-}
-
-function drawTable(
-  page: import("pdf-lib").PDFPage,
-  font: import("pdf-lib").PDFFont,
-  opts: {
-    x: number;
-    y: number;
-    cellW: number;
-    cellH: number;
-    labels: string[];
-    fontSize: number;
-  }
-) {
-  const { x, y, cellW, cellH, labels, fontSize } = opts;
-  const w = cellW * 3;
-  const h = cellH * 2;
-  page.drawRectangle({
-    x,
-    y,
-    width: w,
-    height: h,
-    borderWidth: LINE_THICKNESS,
-    borderColor: TABLE_BORDER,
-  });
-  page.drawLine({
-    start: { x, y: y + cellH },
-    end: { x: x + w, y: y + cellH },
-    thickness: LINE_THICKNESS,
-    color: TABLE_BORDER,
-  });
-  page.drawLine({
-    start: { x: x + cellW, y },
-    end: { x: x + cellW, y: y + h },
-    thickness: LINE_THICKNESS,
-    color: TABLE_BORDER,
-  });
-  page.drawLine({
-    start: { x: x + cellW * 2, y },
-    end: { x: x + cellW * 2, y: y + h },
-    thickness: LINE_THICKNESS,
-    color: TABLE_BORDER,
-  });
-  page.setFont(font);
-  page.setFontSize(fontSize);
-  const padH = 5;
-  const padV = 4;
-  const textY0 = y + cellH + padV;
-  const textY1 = y + padV;
-  for (let c = 0; c < 3; c++) {
-    const cx = x + c * cellW + padH;
-    if (labels[c]) page.drawText(labels[c], { x: cx, y: textY0, size: fontSize });
-    if (labels[3 + c]) page.drawText(labels[3 + c], { x: cx, y: textY1, size: fontSize });
-  }
-}
-
-const COURT_PDF_W = 170;
-const COURT_PDF_H = 200;
-const COURT_LABEL_H = 8;
-const COURT_ROW_H = COURT_PDF_H + COURT_LABEL_H + 6;
-const ATTACK_LINE_Y_APP = 200;
-
-type SavedAnnotation = { type: "path" | "arrow"; points: number[]; stroke?: string; pointerAtBeginning?: boolean; pointerAtEnding?: boolean; tension?: number };
-
-function scaleToCourt(px: number, py: number, courtX: number, courtY: number): { x: number; y: number } {
-  const x = courtX + (px / COURT_WIDTH) * COURT_PDF_W;
-  const y = courtY + COURT_PDF_H - (py / COURT_HEIGHT) * COURT_PDF_H;
-  return { x, y };
-}
-
-function drawSmallCourt(
-  page: import("pdf-lib").PDFPage,
-  font: import("pdf-lib").PDFFont,
-  opts: {
-    x: number;
-    y: number;
-    players: { id: string; x: number; y: number }[];
-    lineup: Lineup;
-    applyLineup: boolean;
-    annotations: SavedAnnotation[];
-    labelFontSize: number;
-  }
-) {
-  const { x, y, players, lineup, applyLineup, annotations, labelFontSize } = opts;
-  page.drawRectangle({
-    x,
-    y,
-    width: COURT_PDF_W,
-    height: COURT_PDF_H,
-    borderWidth: LINE_THICKNESS,
-    borderColor: TABLE_BORDER,
-  });
-  const attackY = y + COURT_PDF_H - (ATTACK_LINE_Y_APP / COURT_HEIGHT) * COURT_PDF_H;
-  page.drawLine({
-    start: { x, y: attackY },
-    end: { x: x + COURT_PDF_W, y: attackY },
-    thickness: LINE_THICKNESS,
-    color: grayscale(0.5),
-  });
-  const strokeColor = grayscale(0.25);
-  annotations.forEach((ann) => {
-    if (!ann.points || ann.points.length < 4) return;
-    for (let i = 0; i < ann.points.length - 2; i += 2) {
-      const a = scaleToCourt(ann.points[i], ann.points[i + 1], x, y);
-      const b = scaleToCourt(ann.points[i + 2], ann.points[i + 3], x, y);
-      page.drawLine({ start: a, end: b, thickness: 0.8, color: strokeColor });
-    }
-    if (ann.type === "arrow" && ann.points.length >= 4) {
-      const n = ann.points.length;
-      const end = scaleToCourt(ann.points[n - 2], ann.points[n - 1], x, y);
-      const prev = scaleToCourt(ann.points[n - 4], ann.points[n - 3], x, y);
-      const dx = end.x - prev.x;
-      const dy = end.y - prev.y;
-      const len = Math.sqrt(dx * dx + dy * dy) || 1;
-      const ux = dx / len;
-      const uy = dy / len;
-      const ah = 4;
-      page.drawLine({ start: end, end: { x: end.x - ux * ah - uy * ah, y: end.y - uy * ah + ux * ah }, thickness: 0.8, color: strokeColor });
-      page.drawLine({ start: end, end: { x: end.x - ux * ah + uy * ah, y: end.y - uy * ah - ux * ah }, thickness: 0.8, color: strokeColor });
-    }
-  });
-  const r = 11;
-  page.setFont(font);
-  page.setFontSize(labelFontSize);
-  players.forEach((p) => {
-    const cx = x + (p.x / COURT_WIDTH) * COURT_PDF_W;
-    const cy = y + COURT_PDF_H - (p.y / COURT_HEIGHT) * COURT_PDF_H;
-    page.drawEllipse({
-      x: cx,
-      y: cy,
-      xScale: r,
-      yScale: r,
-      borderWidth: 0.5,
-      borderColor: TABLE_BORDER,
-    });
-    const roleLabel = getRoleDisplayName(normalizePlayerId(p.id));
-    const label = applyLineup ? getRotationTableLabel(p.id, lineup, roleLabel) : roleLabel;
-    const tw = label.length * labelFontSize * 0.5;
-    page.drawText(label, { x: cx - tw / 2, y: cy - labelFontSize / 2, size: labelFontSize });
-  });
-}
-
-async function buildRotationTablePdf(params: {
-  configName: string;
-  rotationData: { players: { id: string; x: number; y: number; isFrontRow?: boolean }[]; annotations?: SavedAnnotation[] }[];
-  lineup: Lineup;
-  applyLineup: boolean;
-  rotations: number[];
-}): Promise<Uint8Array> {
-  const { configName, rotationData, lineup, applyLineup, rotations } = params;
-  const pdfDoc = await PDFDocument.create();
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const page = pdfDoc.addPage([612, 792]);
-  const PAGE_W = 612;
-  const PAGE_H = 792;
-  const M = 28;
-  const TITLE_SPACE = 24;
-  const CENTER_GAP = 6;
-  const POSITION_GROUPS_GAP = 8;
-  const blocksStartX = M;
-  const blocksAreaW = PAGE_W - 2 * M;
-  const COLS = 2;
-  const BLOCK_W = blocksAreaW / COLS;
-  const LIBS_RESERVED = 24;
-  const tableWidthPerBlock = BLOCK_W - LIBS_RESERVED;
-  const cellW = Math.floor(tableWidthPerBlock / 3);
-  const BLOCK_CONTENT_H = 56;
-  const BLOCK_H = BLOCK_CONTENT_H;
-
-  const cellH = 18;
-  const labelSize = 8;
-  const headerSize = 10;
-  const libsLabelSize = 7;
-
-  const liberoNum = applyLineup ? (lineup["L"]?.number?.trim() || "None") : "";
-
-  page.setFont(font);
-  page.setFontSize(16);
-  page.drawText(configName || "Rotation sheet", { x: M, y: PAGE_H - M - 22 });
-
-  const posGroupsHeight = applyLineup
-    ? Math.max(
-        ...POSITION_GROUPS.map(
-          (g) =>
-            POSITION_GROUP_TITLE_H +
-            POSITION_GROUP_HEADER_H +
-            Math.max(1, g.positions.length) * POSITION_GROUP_ROW_H
-        )
-      )
-    : 0;
-  if (applyLineup) {
-    const posGroupsY = PAGE_H - M - TITLE_SPACE - posGroupsHeight;
-    drawPositionGroupsRow(page, font, lineup, {
-      x: M,
-      y: posGroupsY,
-      totalWidth: blocksAreaW,
-      gap: POSITION_GROUPS_GAP,
-      fontSize: 7,
-    });
-  }
-  const posGroupsGap = applyLineup ? 12 : 0;
-  const topRowBottom =
-    PAGE_H - M - TITLE_SPACE - posGroupsHeight - posGroupsGap - BLOCK_H;
-
-  rotations.forEach((rotNum, idx) => {
-    const col = idx % COLS;
-    const row = Math.floor(idx / COLS);
-    const baseX = blocksStartX + col * BLOCK_W;
-    const baseY = topRowBottom - row * (CENTER_GAP + BLOCK_H);
-    const blockTop = baseY + BLOCK_H - 8;
-
-    page.setFontSize(headerSize);
-    page.drawText(`Rotation ${rotNum}`, { x: baseX, y: blockTop });
-
-    const snap = rotationData[rotNum - 1];
-    if (!snap?.players?.length) return;
-
-    const ordered = playersInCourtOrder(snap.players);
-    const labels = ordered.map((p) => {
-      const roleLabel = getRoleDisplayName(normalizePlayerId(p.id));
-      return applyLineup ? getRotationTableLabel(p.id, lineup, roleLabel) : roleLabel;
-    });
-
-    const tableY = blockTop - 10 - cellH * 2;
-    drawTable(page, font, { x: baseX, y: tableY, cellW, cellH, labels, fontSize: labelSize });
-
-    if (applyLineup) {
-      const libsX = baseX + cellW * 3 + 6;
-      page.setFontSize(libsLabelSize);
-      page.drawText("Libs", { x: libsX, y: tableY + cellH * 2 - 2, size: libsLabelSize });
-      page.drawText(liberoNum, { x: libsX, y: tableY + cellH - 2, size: libsLabelSize });
-    }
-  });
-
-  const courtsGap = 10;
-  const courtBlockW = blocksAreaW / 3;
-  const courtLabelSize = 7;
-  const tableBottomY = topRowBottom - 2 * (CENTER_GAP + BLOCK_H) + BLOCK_H - 8 - 10 - cellH * 2; // bottom y of lowest rotation table
-  const gapBelowTables = 14;
-  const courtLabelHeight = courtLabelSize + 2;
-  const courtsSectionTop = tableBottomY - gapBelowTables;
-  const courtYTopRow = courtsSectionTop - COURT_PDF_H - courtLabelHeight;
-  const courtYBottomRow = courtYTopRow - (COURT_ROW_H + courtsGap);
-  rotations.forEach((rotNum, idx) => {
-    const col = idx % 3;
-    const row = Math.floor(idx / 3);
-    const courtX = blocksStartX + col * courtBlockW + (courtBlockW - COURT_PDF_W) / 2;
-    const courtY = row === 0 ? courtYTopRow : courtYBottomRow;
-    const snap = rotationData[rotNum - 1];
-    page.setFontSize(courtLabelSize);
-    page.drawText(`Rotation ${rotNum}`, { x: courtX, y: courtY + COURT_PDF_H + 2, size: courtLabelSize });
-    if (snap?.players?.length) {
-      drawSmallCourt(page, font, {
-        x: courtX,
-        y: courtY,
-        players: snap.players,
-        lineup,
-        applyLineup,
-        annotations: snap.annotations ?? [],
-        labelFontSize: 6,
-      });
-    }
-  });
-
-  return pdfDoc.save();
-}
-
-export function VisualizerView({ ctx }: Props) {
-  const c = ctx;
   const courtRef = useRef<CourtRef>(null);
   const [signInTooltip, setSignInTooltip] = useState<"lineup" | "saveAs" | null>(null);
   const [lineupMenuOpen, setLineupMenuOpen] = useState(false);
-  const needSignIn = !c.user || c.user.isAnonymous;
-  const selectedLineupName = c.selectedLineupId ? c.savedLineups.find((l) => l.id === c.selectedLineupId)?.name ?? "" : "";
+  const needSignIn = !visualizer.user || visualizer.user.isAnonymous;
+  const selectedLineupName = lineup.selectedLineupId ? lineup.savedLineups.find((l) => l.id === lineup.selectedLineupId)?.name ?? "" : "";
 
   const handleExportRequest = useCallback(
     async (opts: ExportOptions) => {
       const { applyLineup, lineupId, configId, rotations } = opts;
       if (rotations.length === 0) return;
-      const rotationBefore = c.rotation;
-      const lineup =
+      const rotationBefore = court.rotation;
+      const lineupData =
         applyLineup && lineupId
-          ? (c.savedLineups.find((l) => l.id === lineupId)?.lineup as Lineup) ?? {}
-          : c.lineup;
+          ? (lineup.savedLineups.find((l) => l.id === lineupId)?.lineup as Lineup) ?? {}
+          : lineup.lineup;
       let rotationData: RotationSnapshot[];
       let configName: string;
       if (configId === "5-1-default" || configId === "6-2-default") {
@@ -564,33 +204,33 @@ export function VisualizerView({ ctx }: Props) {
         }));
         configName = def?.name ?? configId;
       } else {
-        const config = configId ? c.customConfigs.find((cf) => cf.id === configId) : null;
-        rotationData = config?.rotations ?? c.rotationData;
-        configName = config?.name ?? (c.currentConfigDisplayName || `Default (${c.system} R${c.rotation})`);
+        const config = configId ? configSave.customConfigs.find((cf) => cf.id === configId) : null;
+        rotationData = config?.rotations ?? court.rotationData;
+        configName = config?.name ?? (court.currentConfigDisplayName || `Default (${court.system} R${court.rotation})`);
       }
-      c.setExporting(true);
+      exportCtx.setExporting(true);
       try {
         const pdfBytes = await buildRotationTablePdf({
           configName,
           rotationData,
-          lineup,
+          lineup: lineupData,
           applyLineup,
           rotations: rotations.sort((a, b) => a - b),
         });
         const blob = new Blob([pdfBytes.slice(0)], { type: "application/pdf" });
         const url = URL.createObjectURL(blob);
-        c.setPreviewPdfUrl(url);
-        c.setShowExportModal(false);
-        c.showToast("PDF ready. Preview below, then Save or Don't save.", "info");
+        exportCtx.setPreviewPdfUrl(url);
+        exportCtx.setShowExportModal(false);
+        visualizer.showToast("PDF ready. Preview below, then Save or Don't save.", "info");
       } catch (e) {
         console.error(e);
-        c.showToast(e instanceof Error ? e.message : "Export failed.", "error");
+        visualizer.showToast(e instanceof Error ? e.message : "Export failed.", "error");
       } finally {
-        c.setExporting(false);
-        c.handleRotationChange(rotationBefore);
+        exportCtx.setExporting(false);
+        court.handleRotationChange(rotationBefore);
       }
     },
-    [c]
+    [court, lineup, configSave, exportCtx, visualizer]
   );
 
   return (
@@ -600,15 +240,15 @@ export function VisualizerView({ ctx }: Props) {
           <div className="segmented-control" role="group" aria-label="Serve or receive">
             <button
               type="button"
-              className={`btn-segment ${!c.serveReceive ? "active" : ""}`}
-              onClick={() => { c.setServeReceive(false); c.handleServeReceiveChange(false); }}
+              className={`btn-segment ${!court.serveReceive ? "active" : ""}`}
+              onClick={() => { court.setServeReceive(false); court.handleServeReceiveChange(false); }}
             >
               Serve
             </button>
             <button
               type="button"
-              className={`btn-segment ${c.serveReceive ? "active" : ""}`}
-              onClick={() => { c.setServeReceive(true); c.handleServeReceiveChange(true); }}
+              className={`btn-segment ${court.serveReceive ? "active" : ""}`}
+              onClick={() => { court.setServeReceive(true); court.handleServeReceiveChange(true); }}
             >
               Receive
             </button>
@@ -621,8 +261,8 @@ export function VisualizerView({ ctx }: Props) {
             <button
               key={r}
               type="button"
-              className={`btn-rotation ${c.rotation === r ? "active" : ""}`}
-              onClick={() => c.handleRotationChange(r)}
+              className={`btn-rotation ${court.rotation === r ? "active" : ""}`}
+              onClick={() => court.handleRotationChange(r)}
             >
               {r}
             </button>
@@ -633,15 +273,15 @@ export function VisualizerView({ ctx }: Props) {
           <div className="segmented-control" role="group" aria-label="System">
             <button
               type="button"
-              className={`btn-segment ${c.system === "5-1" ? "active" : ""}`}
-              onClick={() => c.handleSystemChange("5-1")}
+              className={`btn-segment ${court.system === "5-1" ? "active" : ""}`}
+              onClick={() => court.handleSystemChange("5-1")}
             >
               5-1
             </button>
             <button
               type="button"
-              className={`btn-segment ${c.system === "6-2" ? "active" : ""}`}
-              onClick={() => c.handleSystemChange("6-2")}
+              className={`btn-segment ${court.system === "6-2" ? "active" : ""}`}
+              onClick={() => court.handleSystemChange("6-2")}
             >
               6-2
             </button>
@@ -651,16 +291,16 @@ export function VisualizerView({ ctx }: Props) {
         <div className="control-group control-group-libero">
           <span className="control-label">Libero</span>
           <Toggle
-            checked={!!c.currentLibero}
+            checked={!!court.currentLibero}
             onChange={(checked) => {
               if (checked) {
-                const backRow = c.players.filter((p) => !p.isFrontRow);
-                c.setLiberoTargetId(backRow[0]?.id ?? null);
-                c.setShowLiberoModal(true);
-              } else if (c.currentLibero) {
-                c.setPlayers((prev) =>
+                const backRow = court.players.filter((p) => !p.isFrontRow);
+                court.setLiberoTargetId(backRow[0]?.id ?? null);
+                court.setShowLiberoModal(true);
+              } else if (court.currentLibero) {
+                court.setPlayers((prev) =>
                   prev.map((p) =>
-                    p.id !== c.currentLibero!.id
+                    p.id !== court.currentLibero!.id
                       ? p
                       : { ...p, label: p.id, color: getRoleColorFromId(p.id), isLibero: false }
                   )
@@ -672,7 +312,7 @@ export function VisualizerView({ ctx }: Props) {
         </div>
       </div>
 
-      <div ref={c.mainContentRef} className="main-content">
+      <div ref={court.mainContentRef} className="main-content">
         <div className="lineup-card">
           <div className="lineup-title">Lineup</div>
           <div className="lineup-saved-row">
@@ -685,10 +325,10 @@ export function VisualizerView({ ctx }: Props) {
                 aria-expanded={lineupMenuOpen}
                 aria-haspopup="listbox"
                 aria-label="Saved lineups"
-                title={c.selectedLineupId ? selectedLineupName : "New lineup"}
+                title={lineup.selectedLineupId ? selectedLineupName : "New lineup"}
               >
                 <span className="lineup-dropdown-trigger-text">
-                  {c.selectedLineupId ? (selectedLineupName || "No lineup selected") : "New lineup"}
+                  {lineup.selectedLineupId ? (selectedLineupName || "No lineup selected") : "New lineup"}
                 </span>
                 <span className="lineup-dropdown-trigger-arrow" aria-hidden>▼</span>
               </button>
@@ -699,23 +339,23 @@ export function VisualizerView({ ctx }: Props) {
                     <div className="lineup-dropdown-item-row">
                       <button
                         type="button"
-                        className={`lineup-dropdown-item ${!c.selectedLineupId ? "active" : ""}`}
+                        className={`lineup-dropdown-item ${!lineup.selectedLineupId ? "active" : ""}`}
                         role="option"
-                        aria-selected={!c.selectedLineupId}
-                        onClick={() => { c.handleSelectLineup(null); setLineupMenuOpen(false); }}
+                        aria-selected={!lineup.selectedLineupId}
+                        onClick={() => { lineup.handleSelectLineup(null); setLineupMenuOpen(false); }}
                         title="Clear lineup table and start fresh"
                       >
                         <span className="lineup-dropdown-item-name">Create new lineup</span>
                       </button>
                     </div>
-                    {c.savedLineups.map((l) => (
+                    {lineup.savedLineups.map((l) => (
                       <div key={l.id} className="lineup-dropdown-item-row">
                         <button
                           type="button"
-                          className={`lineup-dropdown-item ${c.selectedLineupId === l.id ? "active" : ""}`}
+                          className={`lineup-dropdown-item ${lineup.selectedLineupId === l.id ? "active" : ""}`}
                           role="option"
-                          aria-selected={c.selectedLineupId === l.id}
-                          onClick={() => { c.handleSelectLineup(l.id); setLineupMenuOpen(false); }}
+                          aria-selected={lineup.selectedLineupId === l.id}
+                          onClick={() => { lineup.handleSelectLineup(l.id); setLineupMenuOpen(false); }}
                           title={l.name}
                         >
                           <span className="lineup-dropdown-item-name">{l.name}</span>
@@ -723,7 +363,7 @@ export function VisualizerView({ ctx }: Props) {
                         <button
                           type="button"
                           className="lineup-dropdown-delete"
-                          onClick={(e) => { e.stopPropagation(); c.handleDeleteLineup(l.id); setLineupMenuOpen(false); }}
+                          onClick={(e) => { e.stopPropagation(); lineup.handleDeleteLineup(l.id); setLineupMenuOpen(false); }}
                           title="Delete lineup"
                           aria-label={`Delete ${l.name}`}
                         >
@@ -744,8 +384,8 @@ export function VisualizerView({ ctx }: Props) {
               <button
                 type="button"
                 className="btn-lineup-save"
-                disabled={!c.user || c.user?.isAnonymous === true}
-                onClick={c.handleSaveLineupAsClick}
+                disabled={!visualizer.user || visualizer.user?.isAnonymous === true}
+                onClick={lineup.handleSaveLineupAsClick}
               >
                 Save as…
               </button>
@@ -756,20 +396,20 @@ export function VisualizerView({ ctx }: Props) {
             <button
               type="button"
               className="btn-lineup-save"
-              disabled={!c.user || c.user?.isAnonymous === true || !c.selectedLineupId}
-              onClick={c.handleSaveLineupClick}
+              disabled={!visualizer.user || visualizer.user?.isAnonymous === true || !lineup.selectedLineupId}
+              onClick={lineup.handleSaveLineupClick}
             >
               Save
             </button>
           </div>
           <LineupTable
             title="Lineup"
-            lineup={c.lineup}
-            onLineupChange={c.handleLineupChange}
-            showNumber={c.lineupShowNumber}
-            showName={c.lineupShowName}
-            onShowNumberChange={c.setLineupShowNumber}
-            onShowNameChange={c.setLineupShowName}
+            lineup={lineup.lineup}
+            onLineupChange={lineup.handleLineupChange}
+            showNumber={lineup.lineupShowNumber}
+            showName={lineup.lineupShowName}
+            onShowNumberChange={lineup.setLineupShowNumber}
+            onShowNameChange={lineup.setLineupShowName}
           />
         </div>
         <div className="court-column">
@@ -780,17 +420,17 @@ export function VisualizerView({ ctx }: Props) {
                   <button
                     type="button"
                     className="court-toolbar-btn"
-                    onClick={() => c.setFileMenuOpen((o) => !o)}
-                    aria-expanded={c.fileMenuOpen}
+                    onClick={() => visualizer.setFileMenuOpen((o) => !o)}
+                    aria-expanded={visualizer.fileMenuOpen}
                     aria-haspopup="true"
                   >
                     File
                   </button>
-                  {c.fileMenuOpen && (
+                  {visualizer.fileMenuOpen && (
                     <>
-                      <div className="court-toolbar-dropdown-backdrop" onClick={() => c.setFileMenuOpen(false)} aria-hidden />
+                      <div className="court-toolbar-dropdown-backdrop" onClick={() => visualizer.setFileMenuOpen(false)} aria-hidden />
                       <div className="court-toolbar-dropdown" role="menu">
-                        {c.activeView === "court" && (
+                        {visualizer.activeView === "court" && (
                           <>
                             <span
                               className="court-toolbar-dropdown-item-wrap"
@@ -802,34 +442,34 @@ export function VisualizerView({ ctx }: Props) {
                                 type="button"
                                 className="court-toolbar-dropdown-item"
                                 role="menuitem"
-                                disabled={!c.user || c.user.isAnonymous === true}
+                                disabled={!visualizer.user || visualizer.user.isAnonymous === true}
                                 onClick={() => {
-                                c.setFileMenuOpen(false);
+                                visualizer.setFileMenuOpen(false);
                                 const currentUser = auth.currentUser;
                                 if (!currentUser || currentUser.isAnonymous) {
-                                  c.showToast("Sign in to save configurations.", "info");
+                                  visualizer.showToast("Sign in to save configurations.", "info");
                                   return;
                                 }
                                 const allDefaults = [...default51Rotations, ...default62Rotations];
-                                let sys: "5-1" | "6-2" = c.system;
-                                let rot = c.rotation;
-                                if (c.customConfigKey.includes("-default")) {
-                                  const def = allDefaults.find((d) => d.id === c.customConfigKey);
+                                let sys: "5-1" | "6-2" = court.system;
+                                let rot = court.rotation;
+                                if (configSave.customConfigKey.includes("-default")) {
+                                  const def = allDefaults.find((d) => d.id === configSave.customConfigKey);
                                   if (def) sys = def.system as "5-1" | "6-2";
-                                  rot = c.rotation;
-                                } else if (c.customConfigKey.startsWith("custom:")) {
-                                  const cfg = c.customConfigs.find((cf) => cf.id === c.customConfigKey.split("custom:")[1]);
+                                  rot = court.rotation;
+                                } else if (configSave.customConfigKey.startsWith("custom:")) {
+                                  const cfg = configSave.customConfigs.find((cf) => cf.id === configSave.customConfigKey.split("custom:")[1]);
                                   if (cfg) {
                                     sys = (cfg as SavedVisualizerConfig).system ?? "5-1";
                                     rot = 1;
                                   }
                                 }
-                                c.setNewSystem(sys);
-                                c.setNewRotation(rot);
-                                c.setSaveConfigMode("one");
-                                c.setSaveRotationOne(c.rotation);
-                                c.setSaveRotationsMulti([false, false, false, false, false, false]);
-                                c.setShowSaveModal(true);
+                                configSave.setNewSystem(sys);
+                                configSave.setNewRotation(rot);
+                                configSave.setSaveConfigMode("one");
+                                configSave.setSaveRotationOne(court.rotation);
+                                configSave.setSaveRotationsMulti([false, false, false, false, false, false]);
+                                configSave.setShowSaveModal(true);
                               }}
                               >
                                 Save as…
@@ -842,8 +482,8 @@ export function VisualizerView({ ctx }: Props) {
                               type="button"
                               className="court-toolbar-dropdown-item"
                               role="menuitem"
-                              disabled={!c.user || !c.customConfigKey.startsWith("custom:")}
-                              onClick={() => { c.setFileMenuOpen(false); c.handleOverwriteCurrentConfig(); }}
+                              disabled={!visualizer.user || !configSave.customConfigKey.startsWith("custom:")}
+                              onClick={() => { visualizer.setFileMenuOpen(false); configSave.handleOverwriteCurrentConfig(); }}
                             >
                               Save
                             </button>
@@ -853,7 +493,7 @@ export function VisualizerView({ ctx }: Props) {
                           type="button"
                           className="court-toolbar-dropdown-item"
                           role="menuitem"
-                          onClick={() => { c.setFileMenuOpen(false); c.setLineupExplorerOpen(true); }}
+                          onClick={() => { visualizer.setFileMenuOpen(false); lineup.setLineupExplorerOpen(true); }}
                         >
                           Custom config…
                         </button>
@@ -866,17 +506,17 @@ export function VisualizerView({ ctx }: Props) {
               <div className="court-toolbar-group">
                 <button
                   type="button"
-                  className={`court-toolbar-btn court-toolbar-draw-toggle ${c.drawPopoverOpen ? "draw-toggle-open" : ""}`}
+                  className={`court-toolbar-btn court-toolbar-draw-toggle ${annotations.drawPopoverOpen ? "draw-toggle-open" : ""}`}
                   onClick={() => {
-                    if (c.drawMode && c.drawPopoverOpen) {
-                      c.setDrawPopoverOpen(false);
-                      c.setDrawMode(false);
-                      c.setSelectedAnnotationIndices([]);
-                    } else if (!c.drawMode) {
-                      c.setDrawPopoverOpen(true);
-                      c.setDrawMode(true);
+                    if (annotations.drawMode && annotations.drawPopoverOpen) {
+                      annotations.setDrawPopoverOpen(false);
+                      annotations.setDrawMode(false);
+                      annotations.setSelectedAnnotationIndices([]);
+                    } else if (!annotations.drawMode) {
+                      annotations.setDrawPopoverOpen(true);
+                      annotations.setDrawMode(true);
                     } else {
-                      c.setDrawPopoverOpen(true);
+                      annotations.setDrawPopoverOpen(true);
                     }
                   }}
                 >
@@ -887,12 +527,12 @@ export function VisualizerView({ ctx }: Props) {
               <div className="court-toolbar-group">
                 <button
                   type="button"
-                  className={`court-toolbar-btn ${c.isLocked ? "active" : ""}`}
-                  onClick={() => c.setIsLocked(!c.isLocked)}
+                  className={`court-toolbar-btn ${court.isLocked ? "active" : ""}`}
+                  onClick={() => court.setIsLocked(!court.isLocked)}
                 >
-                  {c.isLocked ? "Unlock" : "Lock"}
+                  {court.isLocked ? "Unlock" : "Lock"}
                 </button>
-                <button type="button" className="court-toolbar-btn" onClick={c.handleReset}>
+                <button type="button" className="court-toolbar-btn" onClick={court.handleReset}>
                   Reset
                 </button>
               </div>
@@ -901,8 +541,8 @@ export function VisualizerView({ ctx }: Props) {
                 <button
                   type="button"
                   className="court-toolbar-btn"
-                  onClick={() => undoClick(c)}
-                  disabled={c.undoStackLength === 0}
+                  onClick={() => undoClick(annotations)}
+                  disabled={annotations.undoStackLength === 0}
                   title="Undo (Ctrl+Z)"
                 >
                   Undo
@@ -910,21 +550,21 @@ export function VisualizerView({ ctx }: Props) {
                 <button
                   type="button"
                   className="court-toolbar-btn"
-                  onClick={() => redoClick(c)}
-                  disabled={c.redoStackLength === 0}
+                  onClick={() => redoClick(annotations)}
+                  disabled={annotations.redoStackLength === 0}
                   title="Redo (Ctrl+Y)"
                 >
                   Redo
                 </button>
-                <button type="button" className="court-toolbar-btn" onClick={() => { c.pushUndo(); c.setAnnotations([]); }} title="Clear all annotations">
+                <button type="button" className="court-toolbar-btn" onClick={() => { annotations.pushUndo(); annotations.setAnnotations([]); }} title="Clear all annotations">
                   Clear
                 </button>
                 <button
                   type="button"
                   className="court-toolbar-btn"
                   onClick={() => {
-                    c.setExportLineupId(c.selectedLineupId);
-                    c.setShowExportModal(true);
+                    exportCtx.setExportLineupId(lineup.selectedLineupId);
+                    exportCtx.setShowExportModal(true);
                   }}
                   title="Export as PDF"
                 >
@@ -934,18 +574,18 @@ export function VisualizerView({ ctx }: Props) {
               <span className="court-toolbar-sep court-toolbar-sep-fill" aria-hidden />
               <div className="court-toolbar-config-badge" aria-live="polite">
                 <span className="court-toolbar-config-badge-label">Config</span>
-                <span className="court-toolbar-config-badge-value" title={c.currentConfigDisplayName || `Default (${c.system} R${c.rotation})`}>
-                  {c.currentConfigDisplayName || `Default (${c.system} R${c.rotation})`}
+                <span className="court-toolbar-config-badge-value" title={court.currentConfigDisplayName || `Default (${court.system} R${court.rotation})`}>
+                  {court.currentConfigDisplayName || `Default (${court.system} R${court.rotation})`}
                 </span>
               </div>
             </div>
-            {c.drawMode && c.drawPopoverOpen && (
+            {annotations.drawMode && annotations.drawPopoverOpen && (
               <div className="draw-toolbar-popover" role="toolbar" aria-label="Drawing tools">
                 <div className="draw-toolbar-row">
                   <button
                     type="button"
-                    className={`court-toolbar-btn court-toolbar-btn-icon ${c.drawTool === "select" ? "active-subtle" : ""}`}
-                    onClick={() => { c.setDrawTool("select"); c.setSelectedAnnotationIndices([]); c.setPencilMenuOpen(false); c.setArrowMenuOpen(false); }}
+                    className={`court-toolbar-btn court-toolbar-btn-icon ${annotations.drawTool === "select" ? "active-subtle" : ""}`}
+                    onClick={() => { annotations.setDrawTool("select"); annotations.setSelectedAnnotationIndices([]); annotations.setPencilMenuOpen(false); annotations.setArrowMenuOpen(false); }}
                     title="Select"
                     aria-label="Select"
                   >
@@ -954,22 +594,22 @@ export function VisualizerView({ ctx }: Props) {
                   <div className="draw-toolbar-icon-wrap">
                     <button
                       type="button"
-                      className={`court-toolbar-btn court-toolbar-btn-icon ${c.drawTool === "pencil" ? "active" : ""}`}
-                      onClick={() => { c.setDrawTool("pencil"); c.setArrowMenuOpen(false); c.setPencilMenuOpen((o) => !o); }}
+                      className={`court-toolbar-btn court-toolbar-btn-icon ${annotations.drawTool === "pencil" ? "active" : ""}`}
+                      onClick={() => { annotations.setDrawTool("pencil"); annotations.setArrowMenuOpen(false); annotations.setPencilMenuOpen((o) => !o); }}
                       title="Pencil"
                       aria-label="Pencil"
                     >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill={c.pencilColor} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 15.5L13 18l5-5z" /><path d="M2 2l7.5 7.5" /></svg>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill={annotations.pencilColor} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 15.5L13 18l5-5z" /><path d="M2 2l7.5 7.5" /></svg>
                     </button>
-                    {c.pencilMenuOpen && (
+                    {annotations.pencilMenuOpen && (
                       <div className="draw-toolbar-icon-menu" role="menu">
                         {DRAW_COLORS.map((color) => (
                           <button
                             key={color}
                             type="button"
-                            className={`draw-color-swatch ${c.pencilColor === color ? "active" : ""}`}
+                            className={`draw-color-swatch ${annotations.pencilColor === color ? "active" : ""}`}
                             style={{ background: color }}
-                            onClick={() => { c.setPencilColor(color); c.setPencilMenuOpen(false); }}
+                            onClick={() => { annotations.setPencilColor(color); annotations.setPencilMenuOpen(false); }}
                             title={color}
                             aria-label={`Color ${color}`}
                             role="menuitem"
@@ -981,23 +621,23 @@ export function VisualizerView({ ctx }: Props) {
                   <div className="draw-toolbar-icon-wrap">
                     <button
                       type="button"
-                      className={`court-toolbar-btn court-toolbar-btn-icon ${c.drawTool === "arrow" ? "active" : ""}`}
-                      onClick={() => { c.setDrawTool("arrow"); c.setPencilMenuOpen(false); c.setArrowMenuOpen((o) => !o); }}
+                      className={`court-toolbar-btn court-toolbar-btn-icon ${annotations.drawTool === "arrow" ? "active" : ""}`}
+                      onClick={() => { annotations.setDrawTool("arrow"); annotations.setPencilMenuOpen(false); annotations.setArrowMenuOpen((o) => !o); }}
                       title="Arrow"
                       aria-label="Arrow"
                     >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill={c.arrowColor} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5l7 7-7 7" /></svg>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill={annotations.arrowColor} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5l7 7-7 7" /></svg>
                     </button>
-                    {c.arrowMenuOpen && (
+                    {annotations.arrowMenuOpen && (
                       <div className="draw-toolbar-icon-menu" role="menu">
                         <div className="draw-toolbar-icon-menu-colors">
                           {DRAW_COLORS.map((color) => (
                             <button
                               key={color}
                               type="button"
-                              className={`draw-color-swatch ${c.arrowColor === color ? "active" : ""}`}
+                              className={`draw-color-swatch ${annotations.arrowColor === color ? "active" : ""}`}
                               style={{ background: color }}
-                              onClick={() => c.setArrowColor(color)}
+                              onClick={() => annotations.setArrowColor(color)}
                               title={color}
                               aria-label={`Arrow color ${color}`}
                               role="menuitem"
@@ -1005,7 +645,7 @@ export function VisualizerView({ ctx }: Props) {
                           ))}
                         </div>
                         <label className="court-toolbar-check draw-toolbar-icon-menu-curved">
-                          <input type="checkbox" checked={c.arrowCurved} onChange={(e) => c.setArrowCurved(e.target.checked)} />
+                          <input type="checkbox" checked={annotations.arrowCurved} onChange={(e) => annotations.setArrowCurved(e.target.checked)} />
                           Curved
                         </label>
                       </div>
@@ -1013,15 +653,15 @@ export function VisualizerView({ ctx }: Props) {
                   </div>
                   <button
                     type="button"
-                    className={`court-toolbar-btn court-toolbar-btn-icon ${c.drawTool === "eraser" ? "active-subtle" : ""}`}
-                    onClick={() => { c.setDrawTool("eraser"); c.setPencilMenuOpen(false); c.setArrowMenuOpen(false); }}
+                    className={`court-toolbar-btn court-toolbar-btn-icon ${annotations.drawTool === "eraser" ? "active-subtle" : ""}`}
+                    onClick={() => { annotations.setDrawTool("eraser"); annotations.setPencilMenuOpen(false); annotations.setArrowMenuOpen(false); }}
                     title="Eraser"
                     aria-label="Eraser"
                   >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 20H7L3 16l10-10 7 7-7 7z" /><path d="M13 7l7 7" /></svg>
                   </button>
                 </div>
-                {c.drawTool === "select" && c.selectedAnnotationIndices.length > 0 && (
+                {annotations.drawTool === "select" && annotations.selectedAnnotationIndices.length > 0 && (
                   <div className="draw-toolbar-row draw-toolbar-options draw-toolbar-colors">
                     <span className="draw-toolbar-label">Color</span>
                     {DRAW_COLORS.map((color) => (
@@ -1031,10 +671,10 @@ export function VisualizerView({ ctx }: Props) {
                         className="draw-color-swatch"
                         style={{ background: color }}
                         onClick={() => {
-                          c.pushUndo();
-                          c.setAnnotations((prev) =>
+                          annotations.pushUndo();
+                          annotations.setAnnotations((prev) =>
                             prev.map((ann, i) =>
-                              c.selectedAnnotationIndices.includes(i) ? { ...ann, stroke: color } : ann
+                              annotations.selectedAnnotationIndices.includes(i) ? { ...ann, stroke: color } : ann
                             )
                           );
                         }}
@@ -1045,14 +685,14 @@ export function VisualizerView({ ctx }: Props) {
                   </div>
                 )}
                 <div className="draw-toolbar-row draw-toolbar-actions">
-                  {c.selectedAnnotationIndices.length > 0 && (
+                  {annotations.selectedAnnotationIndices.length > 0 && (
                     <button
                       type="button"
                       className="court-toolbar-btn"
                       onClick={() => {
-                        c.pushUndo();
-                        c.setAnnotations((prev) => prev.filter((_, i) => !c.selectedAnnotationIndices.includes(i)));
-                        c.setSelectedAnnotationIndices([]);
+                        annotations.pushUndo();
+                        annotations.setAnnotations((prev) => prev.filter((_, i) => !annotations.selectedAnnotationIndices.includes(i)));
+                        annotations.setSelectedAnnotationIndices([]);
                       }}
                     >
                       Delete selected
@@ -1062,12 +702,12 @@ export function VisualizerView({ ctx }: Props) {
               </div>
             )}
           </div>
-          <div className="court-scaled-wrap" ref={c.courtContainerRef}>
+          <div className="court-scaled-wrap" ref={court.courtContainerRef}>
             <div
               className="court-scaled-inner"
               style={{
-                width: COURT_WIDTH * c.courtScale,
-                height: COURT_HEIGHT * c.courtScale,
+                width: COURT_WIDTH * court.courtScale,
+                height: COURT_HEIGHT * court.courtScale,
                 flexShrink: 0,
               }}
             >
@@ -1077,69 +717,69 @@ export function VisualizerView({ ctx }: Props) {
                   height: COURT_HEIGHT,
                   minWidth: COURT_WIDTH,
                   minHeight: COURT_HEIGHT,
-                  transform: `scale(${c.courtScale})`,
+                  transform: `scale(${court.courtScale})`,
                   transformOrigin: "top left",
                 }}
               >
-                {c.courtContainerReady && (
+                {court.courtContainerReady && (
                   <Court
                     ref={courtRef}
-                    players={c.displayPlayers}
-                    isLocked={c.isLocked || c.drawMode}
-                    onDragEnd={c.handleDragEnd}
+                    players={court.displayPlayers}
+                    isLocked={court.isLocked || annotations.drawMode}
+                    onDragEnd={court.handleDragEnd}
                     onColorChange={() => {}}
-                    revertKey={c.revertKey}
-                    annotations={c.annotations}
-                    drawMode={c.drawMode}
-                    drawTool={c.drawTool}
-                    pencilColor={c.pencilColor}
-                    arrowColor={c.arrowColor}
-                    arrowTension={c.arrowCurved ? 1 : 0}
-                    selectedAnnotationIndices={c.selectedAnnotationIndices}
-                    onAnnotationAdd={(ann) => c.setAnnotations((prev) => { c.pushUndo(); return [...prev, ann]; })}
-                    onAnnotationsClear={() => { c.pushUndo(); c.setAnnotations([]); }}
-                    onAnnotationRemove={(i) => c.setAnnotations((prev) => { c.pushUndo(); return prev.filter((_, idx) => idx !== i); })}
-                    onSelectionChange={c.setSelectedAnnotationIndices}
-                    onDrawActionStart={() => { c.setDrawPopoverOpen(false); c.setPencilMenuOpen(false); c.setArrowMenuOpen(false); }}
-                    onSelectionDragStart={c.pushUndo}
-                    onSelectedAnnotationsMove={(dx, dy) => c.setAnnotations((prev) => prev.map((ann, i) => c.selectedAnnotationIndices.includes(i) ? c.translateAnnotation(ann, dx, dy) : ann))}
-                    onAnnotationUpdate={(i, ann) => c.setAnnotations((prev) => prev.map((a, idx) => (idx === i ? ann : a)))}
-                    onClearSelection={() => c.setSelectedAnnotationIndices([])}
+                    revertKey={court.revertKey}
+                    annotations={court.annotations}
+                    drawMode={annotations.drawMode}
+                    drawTool={annotations.drawTool}
+                    pencilColor={annotations.pencilColor}
+                    arrowColor={annotations.arrowColor}
+                    arrowTension={annotations.arrowCurved ? 1 : 0}
+                    selectedAnnotationIndices={annotations.selectedAnnotationIndices}
+                    onAnnotationAdd={(ann) => annotations.setAnnotations((prev) => { annotations.pushUndo(); return [...prev, ann]; })}
+                    onAnnotationsClear={() => { annotations.pushUndo(); annotations.setAnnotations([]); }}
+                    onAnnotationRemove={(i) => annotations.setAnnotations((prev) => { annotations.pushUndo(); return prev.filter((_, idx) => idx !== i); })}
+                    onSelectionChange={annotations.setSelectedAnnotationIndices}
+                    onDrawActionStart={() => { annotations.setDrawPopoverOpen(false); annotations.setPencilMenuOpen(false); annotations.setArrowMenuOpen(false); }}
+                    onSelectionDragStart={annotations.pushUndo}
+                    onSelectedAnnotationsMove={(dx, dy) => annotations.setAnnotations((prev) => prev.map((ann, i) => annotations.selectedAnnotationIndices.includes(i) ? annotations.translateAnnotation(ann, dx, dy) : ann))}
+                    onAnnotationUpdate={(i, ann) => annotations.setAnnotations((prev) => prev.map((a, idx) => (idx === i ? ann : a)))}
+                    onClearSelection={() => annotations.setSelectedAnnotationIndices([])}
                   />
                 )}
               </div>
             </div>
           </div>
           <ExportModal
-            open={c.showExportModal}
-            onClose={() => c.setShowExportModal(false)}
-            savedLineups={c.savedLineups}
-            exportLineupId={c.exportLineupId}
-            onExportLineupIdChange={c.setExportLineupId}
+            open={exportCtx.showExportModal}
+            onClose={() => exportCtx.setShowExportModal(false)}
+            savedLineups={lineup.savedLineups}
+            exportLineupId={exportCtx.exportLineupId}
+            onExportLineupIdChange={exportCtx.setExportLineupId}
             customConfigs={[
               { id: "5-1-default", name: "5-1 Default" },
               { id: "6-2-default", name: "6-2 Default" },
-              ...c.customConfigs.filter((cf) => cf.id).map((cf) => ({ id: cf.id!, name: cf.name })),
+              ...configSave.customConfigs.filter((cf) => cf.id).map((cf) => ({ id: cf.id!, name: cf.name })),
             ]}
-            exportConfigId={c.exportConfigId}
-            onExportConfigIdChange={c.setExportConfigId}
-            rotations={c.exportRotations}
-            onRotationsChange={(i, v) => c.setExportRotations((prev) => prev.map((x, j) => (j === i ? v : x)))}
+            exportConfigId={exportCtx.exportConfigId}
+            onExportConfigIdChange={exportCtx.setExportConfigId}
+            rotations={exportCtx.exportRotations}
+            onRotationsChange={(i, v) => exportCtx.setExportRotations((prev) => prev.map((x, j) => (j === i ? v : x)))}
             onExport={handleExportRequest}
-            exporting={c.exporting}
+            exporting={exportCtx.exporting}
           />
-          {c.showOutOfRotation && (
+          {court.showOutOfRotation && (
             <div
               className="out-of-rotation-overlay"
               style={{ top: COURT_TOOLBAR_HEIGHT }}
               role="alert"
             >
               <div className="out-of-rotation-card">
-                <p className="out-of-rotation-message">{c.outOfRotationMessage || "Out of rotation"}</p>
+                <p className="out-of-rotation-message">{court.outOfRotationMessage || "Out of rotation"}</p>
                 <button
                   type="button"
                   className="out-of-rotation-revert-btn"
-                  onClick={c.handleRevertOutOfRotation}
+                  onClick={court.handleRevertOutOfRotation}
                 >
                   Ok
                 </button>

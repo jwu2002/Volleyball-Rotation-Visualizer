@@ -11,7 +11,11 @@ import { getRotationSet, applyLiberoToBackRowMiddle, applyLiberoToTarget } from 
 import { getDisplayLabel } from "./utils/lineupHelpers";
 import { AppHeader } from "./components/AppHeader";
 import { useAuth } from "./hooks/useAuth";
-import { useVisualizerState } from "./hooks/useVisualizerState";
+import { VisualizerProvider } from "./contexts/VisualizerProvider";
+import { useCourtContext } from "./contexts/CourtContext";
+import { useLineupContext } from "./contexts/LineupContext";
+import { useConfigSaveContext } from "./contexts/ConfigSaveContext";
+import { useExportContext } from "./contexts/ExportContext";
 
 function App() {
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
@@ -55,7 +59,61 @@ function App() {
   } = useAuth({ showToast });
 
   const [activeView, setActiveView] = useState<"court" | "planAhead">("court");
-  const visualizerViewCtx = useVisualizerState(user, activeView, { showToast, showConfirm });
+
+  return (
+    <div className="app">
+      <div className="app-card">
+        <AppHeader
+          user={user}
+          showAccountMenu={showAccountMenu}
+          onToggleAccountMenu={() => setShowAccountMenu((open) => !open)}
+          email={email}
+          setEmail={setEmail}
+          password={password}
+          setPassword={setPassword}
+          onGoogleSignIn={handleGoogleSignIn}
+          onEmailSignUp={handleEmailSignUp}
+          onEmailSignIn={handleEmailSignIn}
+          onSignOut={handleSignOut}
+        />
+        <VisualizerProvider user={user} activeView={activeView} showToast={showToast} showConfirm={showConfirm}>
+          <AppViewContent activeView={activeView} setActiveView={setActiveView} showToast={showToast} />
+        </VisualizerProvider>
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            visible
+            onDismiss={() => setToast(null)}
+          />
+        )}
+        {confirm && (
+          <ConfirmModal
+            open
+            title={confirm.title}
+            message={confirm.message}
+            onConfirm={confirm.onConfirm}
+            onCancel={confirm.onCancel}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AppViewContent({
+  activeView,
+  setActiveView,
+  showToast,
+}: {
+  activeView: "court" | "planAhead";
+  setActiveView: (v: "court" | "planAhead") => void;
+  showToast: (message: string, type?: "success" | "error" | "info") => void;
+}) {
+  const court = useCourtContext();
+  const lineup = useLineupContext();
+  const configSave = useConfigSaveContext();
+  const exportCtx = useExportContext();
 
   const [planAheadServeTeam, setPlanAheadServeTeam] = useState<"A" | "B">("A");
   const [planAheadSystemA, setPlanAheadSystemA] = useState<"5-1" | "6-2">("5-1");
@@ -90,9 +148,9 @@ function App() {
     () => [
       { id: "5-1-default", name: "5-1 Default" },
       { id: "6-2-default", name: "6-2 Default" },
-      ...visualizerViewCtx.customConfigs.filter((c) => c.id).map((c) => ({ id: c.id!, name: c.name })),
+      ...configSave.customConfigs.filter((c) => c.id).map((c) => ({ id: c.id!, name: c.name })),
     ],
-    [visualizerViewCtx.customConfigs]
+    [configSave.customConfigs]
   );
 
   const planAheadPlayersARotations = useMemo(() => {
@@ -106,7 +164,7 @@ function App() {
           : null;
     const customConfigA =
       planAheadConfigIdA && teamAIsReceiving
-        ? visualizerViewCtx.customConfigs.find((c) => c.id === planAheadConfigIdA)
+        ? configSave.customConfigs.find((c) => c.id === planAheadConfigIdA)
         : null;
     const configA = defaultConfigA ?? customConfigA;
     let rotations: { id: string; x: number; y: number; color: string; label: string; isFrontRow?: boolean; isLibero?: boolean }[][];
@@ -148,7 +206,7 @@ function App() {
   }, [
     planAheadServeTeam,
     planAheadConfigIdA,
-    visualizerViewCtx.customConfigs,
+    configSave.customConfigs,
     planAheadLineupA,
     planAheadSystemA,
     getPlayersForRotation,
@@ -177,10 +235,10 @@ function App() {
 
   const planAheadAnnotationsA = useMemo(() => {
     if (planAheadServeTeam !== "B" || !planAheadConfigIdA) return [];
-    const config = visualizerViewCtx.customConfigs.find((c) => c.id === planAheadConfigIdA);
+    const config = configSave.customConfigs.find((c) => c.id === planAheadConfigIdA);
     const snap = config?.rotations?.[planAheadRotationA - 1];
     return Array.isArray(snap?.annotations) ? snap.annotations : [];
-  }, [planAheadServeTeam, planAheadConfigIdA, planAheadRotationA, visualizerViewCtx.customConfigs]);
+  }, [planAheadServeTeam, planAheadConfigIdA, planAheadRotationA, configSave.customConfigs]);
 
   const handlePlanAheadLineupASelect = useCallback(
     (lineupId: string | null) => {
@@ -189,206 +247,189 @@ function App() {
         setPlanAheadLineupA({});
         return;
       }
-      const item = visualizerViewCtx.savedLineups.find((l) => l.id === lineupId);
+      const item = lineup.savedLineups.find((l) => l.id === lineupId);
       if (item?.lineup) setPlanAheadLineupA(item.lineup as Lineup);
     },
-    [visualizerViewCtx.savedLineups]
+    [lineup.savedLineups]
   );
 
   const handlePdfPreviewSave = useCallback(() => {
-    const url = visualizerViewCtx.previewPdfUrl;
+    const url = exportCtx.previewPdfUrl;
     if (!url) return;
     const a = document.createElement("a");
     a.href = url;
     a.download = "volleyball-rotations.pdf";
     a.click();
     URL.revokeObjectURL(url);
-    visualizerViewCtx.setPreviewPdfUrl(null);
+    exportCtx.setPreviewPdfUrl(null);
     showToast("PDF saved.", "success");
-  }, [visualizerViewCtx.previewPdfUrl, visualizerViewCtx.setPreviewPdfUrl, showToast]);
+  }, [exportCtx.previewPdfUrl, exportCtx.setPreviewPdfUrl, showToast]);
 
   const handlePdfPreviewClose = useCallback(() => {
-    const url = visualizerViewCtx.previewPdfUrl;
+    const url = exportCtx.previewPdfUrl;
     if (url) {
       URL.revokeObjectURL(url);
-      visualizerViewCtx.setPreviewPdfUrl(null);
+      exportCtx.setPreviewPdfUrl(null);
     }
-  }, [visualizerViewCtx.previewPdfUrl, visualizerViewCtx.setPreviewPdfUrl]);
-
-  const ctx = visualizerViewCtx;
+  }, [exportCtx.previewPdfUrl, exportCtx.setPreviewPdfUrl]);
 
   return (
-    <div className="app">
-      <div className="app-card">
-        <AppHeader
-          user={user}
-          showAccountMenu={showAccountMenu}
-          onToggleAccountMenu={() => setShowAccountMenu((open) => !open)}
-          email={email}
-          setEmail={setEmail}
-          password={password}
-          setPassword={setPassword}
-          onGoogleSignIn={handleGoogleSignIn}
-          onEmailSignUp={handleEmailSignUp}
-          onEmailSignIn={handleEmailSignIn}
-          onSignOut={handleSignOut}
-        />
+    <>
+      <div className="view-tabs" role="tablist" aria-label="Main view">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeView === "court"}
+          className={`view-tab ${activeView === "court" ? "active" : ""}`}
+          onClick={() => setActiveView("court")}
+        >
+          Visualizer
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeView === "planAhead"}
+          className={`view-tab ${activeView === "planAhead" ? "active" : ""}`}
+          onClick={() => setActiveView("planAhead")}
+        >
+          Plan ahead
+        </button>
+      </div>
 
-        <div className="view-tabs" role="tablist" aria-label="Main view">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeView === "court"}
-            className={`view-tab ${activeView === "court" ? "active" : ""}`}
-            onClick={() => setActiveView("court")}
-          >
-            Visualizer
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeView === "planAhead"}
-            className={`view-tab ${activeView === "planAhead" ? "active" : ""}`}
-            onClick={() => setActiveView("planAhead")}
-          >
-            Plan ahead
-          </button>
+      <div className="view-content-wrap">
+        <div
+          className="court-view-wrap"
+          style={{ display: activeView === "court" ? "flex" : "none" }}
+          aria-hidden={activeView !== "court"}
+        >
+          <VisualizerView />
         </div>
-
-        <div className="view-content-wrap">
-          <div
-            className="court-view-wrap"
-            style={{ display: activeView === "court" ? "flex" : "none" }}
-            aria-hidden={activeView !== "court"}
-          >
-            <VisualizerView ctx={visualizerViewCtx} />
-          </div>
-          <div
-            style={{
-              display: activeView === "planAhead" ? "flex" : "none",
-              flex: 1,
-              minHeight: 0,
-              flexDirection: "column",
-              overflow: "hidden",
+        <div
+          style={{
+            display: activeView === "planAhead" ? "flex" : "none",
+            flex: 1,
+            minHeight: 0,
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+          aria-hidden={activeView !== "planAhead"}
+        >
+          <PlanAhead
+            serveTeam={planAheadServeTeam}
+            onServeTeamChange={setPlanAheadServeTeam}
+            systemA={planAheadSystemA}
+            onSystemAChange={setPlanAheadSystemA}
+            systemB={planAheadSystemB}
+            onSystemBChange={setPlanAheadSystemB}
+            rotationA={planAheadRotationA}
+            onRotationAChange={setPlanAheadRotationA}
+            rotationB={planAheadRotationB}
+            onRotationBChange={setPlanAheadRotationB}
+            liberoOnA={planAheadLiberoTargetIdA !== null}
+            onLiberoAChange={(on: boolean) => {
+              if (on) {
+                const players = planAheadPlayersARotations[planAheadRotationA - 1] ?? [];
+                const backRow = players.filter((p) => !p.isFrontRow);
+                const defaultTarget = planAheadLiberoTargetIdA ?? backRow[0]?.id ?? null;
+                setPlanAheadLiberoDraftA(defaultTarget);
+                setPlanAheadLiberoModalTeam("A");
+              } else {
+                setPlanAheadLiberoTargetIdA(null);
+              }
             }}
-            aria-hidden={activeView !== "planAhead"}
-          >
-            <PlanAhead
-              serveTeam={planAheadServeTeam}
-              onServeTeamChange={setPlanAheadServeTeam}
-              systemA={planAheadSystemA}
-              onSystemAChange={setPlanAheadSystemA}
-              systemB={planAheadSystemB}
-              onSystemBChange={setPlanAheadSystemB}
-              rotationA={planAheadRotationA}
-              onRotationAChange={setPlanAheadRotationA}
-              rotationB={planAheadRotationB}
-              onRotationBChange={setPlanAheadRotationB}
-              liberoOnA={planAheadLiberoTargetIdA !== null}
-              onLiberoAChange={(on: boolean) => {
-                if (on) {
-                  const players = planAheadPlayersARotations[planAheadRotationA - 1] ?? [];
-                  const backRow = players.filter((p) => !p.isFrontRow);
-                  const defaultTarget = planAheadLiberoTargetIdA ?? backRow[0]?.id ?? null;
-                  setPlanAheadLiberoDraftA(defaultTarget);
-                  setPlanAheadLiberoModalTeam("A");
-                } else {
-                  setPlanAheadLiberoTargetIdA(null);
-                }
-              }}
-              liberoOnB={planAheadLiberoTargetIdB !== null}
-              onLiberoBChange={(on: boolean) => {
-                if (on) {
-                  const players = planAheadPlayersBRotations[planAheadRotationB - 1] ?? [];
-                  const backRow = players.filter((p) => !p.isFrontRow);
-                  const defaultTarget = planAheadLiberoTargetIdB ?? backRow[0]?.id ?? null;
-                  setPlanAheadLiberoDraftB(defaultTarget);
-                  setPlanAheadLiberoModalTeam("B");
-                } else {
-                  setPlanAheadLiberoTargetIdB(null);
-                }
-              }}
-              lineupA={planAheadLineupA}
-              onLineupAChange={(pos, entry) => setPlanAheadLineupA((prev) => ({ ...prev, [pos]: entry }))}
-              lineupB={planAheadLineupB}
-              onLineupBChange={(pos, entry) => setPlanAheadLineupB((prev) => ({ ...prev, [pos]: entry }))}
-              playersARotations={planAheadPlayersARotations}
-              playersBRotations={planAheadPlayersBRotations}
-              annotationsA={planAheadAnnotationsA}
-              savedLineups={visualizerViewCtx.savedLineups}
-              planAheadLineupIdA={planAheadLineupIdA}
-              onPlanAheadLineupASelect={handlePlanAheadLineupASelect}
-              customConfigs={customConfigsForPlanAhead}
-              planAheadConfigIdA={planAheadConfigIdA}
-              onPlanAheadConfigIdAChange={setPlanAheadConfigIdA}
-            />
-          </div>
+            liberoOnB={planAheadLiberoTargetIdB !== null}
+            onLiberoBChange={(on: boolean) => {
+              if (on) {
+                const players = planAheadPlayersBRotations[planAheadRotationB - 1] ?? [];
+                const backRow = players.filter((p) => !p.isFrontRow);
+                const defaultTarget = planAheadLiberoTargetIdB ?? backRow[0]?.id ?? null;
+                setPlanAheadLiberoDraftB(defaultTarget);
+                setPlanAheadLiberoModalTeam("B");
+              } else {
+                setPlanAheadLiberoTargetIdB(null);
+              }
+            }}
+            lineupA={planAheadLineupA}
+            onLineupAChange={(pos, entry) => setPlanAheadLineupA((prev) => ({ ...prev, [pos]: entry }))}
+            lineupB={planAheadLineupB}
+            onLineupBChange={(pos, entry) => setPlanAheadLineupB((prev) => ({ ...prev, [pos]: entry }))}
+            playersARotations={planAheadPlayersARotations}
+            playersBRotations={planAheadPlayersBRotations}
+            annotationsA={planAheadAnnotationsA}
+            savedLineups={lineup.savedLineups}
+            planAheadLineupIdA={planAheadLineupIdA}
+            onPlanAheadLineupASelect={handlePlanAheadLineupASelect}
+            customConfigs={customConfigsForPlanAhead}
+            planAheadConfigIdA={planAheadConfigIdA}
+            onPlanAheadConfigIdAChange={setPlanAheadConfigIdA}
+          />
         </div>
+      </div>
 
-        {ctx.previewPdfUrl && (
-          <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="export-preview-title">
-            <div className="modal-panel export-preview-modal">
-              <h2 id="export-preview-title" className="modal-title">PDF Preview</h2>
-              <div className="export-preview-iframe-wrap">
-                <iframe title="PDF preview" src={ctx.previewPdfUrl} />
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn btn-success" onClick={handlePdfPreviewSave}>
-                  Save PDF
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={handlePdfPreviewClose}>
-                  Don&apos;t save
-                </button>
-              </div>
+      {exportCtx.previewPdfUrl && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="export-preview-title">
+          <div className="modal-panel export-preview-modal">
+            <h2 id="export-preview-title" className="modal-title">PDF Preview</h2>
+            <div className="export-preview-iframe-wrap">
+              <iframe title="PDF preview" src={exportCtx.previewPdfUrl} />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-success" onClick={handlePdfPreviewSave}>
+                Save PDF
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={handlePdfPreviewClose}>
+                Don&apos;t save
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        <SaveConfigModal
-          open={ctx.showSaveModal}
-          name={ctx.newName}
-          system={ctx.newSystem}
-          currentRotation={ctx.rotation}
-          saveMode={ctx.saveConfigMode}
-          saveRotationOne={ctx.saveRotationOne}
-          saveRotationsMulti={ctx.saveRotationsMulti}
-          onNameChange={ctx.setNewName}
-          onSystemChange={ctx.setNewSystem}
-          onSaveModeChange={ctx.setSaveConfigMode}
-          onSaveRotationOneChange={ctx.setSaveRotationOne}
-          onSaveRotationsMultiChange={(index, checked) =>
-            ctx.setSaveRotationsMulti((prev: boolean[]) => prev.map((v: boolean, i: number) => (i === index ? checked : v)))
-          }
-          onSave={ctx.handleSaveNewConfig}
-          onClose={() => ctx.setShowSaveModal(false)}
-        />
-        <SaveLineupModal
-          open={ctx.showSaveLineupModal}
-          name={ctx.saveLineupName}
-          onNameChange={ctx.setSaveLineupName}
-          onSave={ctx.handleSaveLineupSubmit}
-          onClose={() => {
-            ctx.setShowSaveLineupModal(false);
-            ctx.setSaveLineupName("");
-          }}
-        />
-        <LineupExplorerModal
-          open={ctx.lineupExplorerOpen}
-          customConfigKey={ctx.customConfigKey}
-          customConfigs={ctx.customConfigs}
-          onSelect={ctx.handleCustomConfigChange}
-          onDeleteConfig={ctx.handleDeleteConfig}
-          onClose={() => ctx.setLineupExplorerOpen(false)}
-        />
-        <LiberoModal
-          open={ctx.showLiberoModal}
-          players={ctx.players}
-          liberoTargetId={ctx.liberoTargetId}
-          onLiberoTargetChange={ctx.setLiberoTargetId}
-          onConfirm={ctx.handleConfirmLiberoSwitch}
-          onClose={() => ctx.setShowLiberoModal(false)}
-        />
-        {planAheadLiberoModalTeam && (() => {
+      <SaveConfigModal
+        open={configSave.showSaveModal}
+        name={configSave.newName}
+        system={configSave.newSystem}
+        currentRotation={configSave.rotation}
+        saveMode={configSave.saveConfigMode}
+        saveRotationOne={configSave.saveRotationOne}
+        saveRotationsMulti={configSave.saveRotationsMulti}
+        onNameChange={configSave.setNewName}
+        onSystemChange={configSave.setNewSystem}
+        onSaveModeChange={configSave.setSaveConfigMode}
+        onSaveRotationOneChange={configSave.setSaveRotationOne}
+        onSaveRotationsMultiChange={(index, checked) =>
+          configSave.setSaveRotationsMulti((prev: boolean[]) => prev.map((v: boolean, i: number) => (i === index ? checked : v)))
+        }
+        onSave={configSave.handleSaveNewConfig}
+        onClose={() => configSave.setShowSaveModal(false)}
+      />
+      <SaveLineupModal
+        open={lineup.showSaveLineupModal}
+        name={lineup.saveLineupName}
+        onNameChange={lineup.setSaveLineupName}
+        onSave={lineup.handleSaveLineupSubmit}
+        onClose={() => {
+          lineup.setShowSaveLineupModal(false);
+          lineup.setSaveLineupName("");
+        }}
+      />
+      <LineupExplorerModal
+        open={lineup.lineupExplorerOpen}
+        customConfigKey={configSave.customConfigKey}
+        customConfigs={configSave.customConfigs}
+        onSelect={configSave.handleCustomConfigChange}
+        onDeleteConfig={configSave.handleDeleteConfig}
+        onClose={() => lineup.setLineupExplorerOpen(false)}
+      />
+      <LiberoModal
+        open={court.showLiberoModal}
+        players={court.players}
+        liberoTargetId={court.liberoTargetId}
+        onLiberoTargetChange={court.setLiberoTargetId}
+        onConfirm={court.handleConfirmLiberoSwitch}
+        onClose={() => court.setShowLiberoModal(false)}
+      />
+      {planAheadLiberoModalTeam && (() => {
           const useReceiveA = planAheadServeTeam === "B";
           const useReceiveB = planAheadServeTeam !== "B";
           const baseA = getPlayersForRotation(planAheadSystemA, planAheadRotationA, useReceiveA);
@@ -415,25 +456,7 @@ function App() {
           />
           );
         })()}
-        {toast && (
-          <Toast
-            message={toast.message}
-            type={toast.type}
-            visible
-            onDismiss={() => setToast(null)}
-          />
-        )}
-        {confirm && (
-          <ConfirmModal
-            open
-            title={confirm.title}
-            message={confirm.message}
-            onConfirm={confirm.onConfirm}
-            onCancel={confirm.onCancel}
-          />
-        )}
-      </div>
-    </div>
+    </>
   );
 }
 

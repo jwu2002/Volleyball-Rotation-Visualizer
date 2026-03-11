@@ -1,3 +1,6 @@
+import type { SavedVisualizerConfig } from "../types/savedConfig";
+import type { Lineup, SavedLineupItem } from "../components/StartingLineup";
+
 const BASE_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
 function getApiUrl(path: string): string {
@@ -116,4 +119,67 @@ export const configsApi = {
   delete: (token: string, id: string) =>
     request<void>("DELETE", `/configs/${id}`, token),
 };
+
+function normalizeRotationSnapshot(raw: unknown): {
+  players: SavedVisualizerConfig["rotations"][0]["players"];
+  annotations: SavedVisualizerConfig["rotations"][0]["annotations"];
+} {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const players = Array.isArray(o.players) ? o.players : [];
+  const annotations = Array.isArray(o.annotations) ? o.annotations : [];
+  return {
+    players: players.map((p: unknown) => normalizeConfigPlayer(p)),
+    annotations: annotations.map((a: unknown) => normalizeConfigAnnotation(a)),
+  };
+}
+
+function normalizeConfigPlayer(raw: unknown): SavedVisualizerConfig["rotations"][0]["players"][0] {
+  const p = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return {
+    id: typeof p.id === "string" ? p.id : "",
+    x: typeof p.x === "number" ? p.x : 0,
+    y: typeof p.y === "number" ? p.y : 0,
+    color: typeof p.color === "string" ? p.color : "#888",
+    label: typeof p.label === "string" ? p.label : "",
+    isFrontRow: p.isFrontRow === true,
+    isLibero: p.isLibero === true,
+  };
+}
+
+function normalizeConfigAnnotation(raw: unknown): SavedVisualizerConfig["rotations"][0]["annotations"][0] {
+  const a = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const type = a.type === "arrow" ? "arrow" : "path";
+  const points = Array.isArray(a.points) ? (a.points as number[]) : [];
+  return {
+    type,
+    points,
+    stroke: typeof a.stroke === "string" ? a.stroke : undefined,
+    pointerAtBeginning: a.pointerAtBeginning === true,
+    pointerAtEnding: a.pointerAtEnding !== false,
+    tension: typeof a.tension === "number" ? a.tension : undefined,
+  };
+}
+
+export async function fetchSavedLineups(token: string): Promise<SavedLineupItem[]> {
+  const list = await lineupsApi.list(token);
+  return list.map((o) => ({
+    id: o.id,
+    name: o.name,
+    lineup: (o.lineup || {}) as Lineup,
+    showNumber: o.showNumber !== false,
+    showName: o.showName === true,
+  }));
+}
+
+export async function fetchSavedVisualizerConfigs(token: string): Promise<SavedVisualizerConfig[]> {
+  const list = await configsApi.list(token);
+  return list.map((o) => ({
+    id: o.id,
+    name: o.name,
+    system: (o.system === "6-2" ? "6-2" : "5-1") as "5-1" | "6-2",
+    rotations: (o.rotations || []).map((r: unknown) => normalizeRotationSnapshot(r)),
+    createdAt: o.createdAt ? new Date(o.createdAt) : undefined,
+    updatedAt: o.updatedAt ? new Date(o.updatedAt) : undefined,
+  }));
+}
 

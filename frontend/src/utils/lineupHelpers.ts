@@ -1,20 +1,8 @@
 import type { Lineup, LineupPositionId } from "../components/StartingLineup";
 import { playerIdToLineupKey } from "./visualizerRotations";
-import { LINEUP_STORAGE_KEY } from "../constants";
 
+/** Returns empty lineup state (no persistence across refresh). */
 export function loadLineupFromStorage(): { lineup: Lineup; showNumber: boolean; showName: boolean } {
-  try {
-    const s = localStorage.getItem(LINEUP_STORAGE_KEY);
-    if (!s) return { lineup: {}, showNumber: false, showName: false };
-    const parsed = JSON.parse(s);
-    if (parsed && typeof parsed === "object") {
-      return {
-        lineup: (parsed.lineup && typeof parsed.lineup === "object") ? parsed.lineup : {},
-        showNumber: !!parsed.showNumber,
-        showName: !!parsed.showName,
-      };
-    }
-  } catch (_) {}
   return { lineup: {}, showNumber: false, showName: false };
 }
 
