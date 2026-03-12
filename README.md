@@ -99,7 +99,7 @@ Supabase (PostgreSQL)
 └── visualizer_configs (user_id, name, system, rotations JSONB)
 ```
 
-The frontend is a static single page application deployed on Vercel. When the user signs in, Firebase issues an ID token that the frontend attaches to every backend request. The backend verifies the token against Firebase's public endpoint — no sessions. From that, the backend can retreive the user's firebase UID. Data is stored in PostgreSQL on Supabase, keyed by Firebase `uid`.
+The frontend is a static single page application deployed on Vercel. When the user signs in, Firebase issues an ID token that the frontend attaches to every backend request. The backend verifies the token against Firebase's public endpoint — no sessions. From that, the backend can retrieve the user's firebase UID. Data is stored in PostgreSQL on Supabase, keyed by Firebase `uid`.
 
 ---
 
@@ -235,7 +235,6 @@ Open `http://localhost:5173`.
 
 ## Future improvements
 
-**Future improvements**
 - Live game tracking — track score and rotation in real time during a match
 - Mobile app — React Native port for iOS and Android, apps on App store and Google play store
 - Team accounts — share lineups and configs across a coaching staff
