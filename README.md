@@ -21,8 +21,7 @@ A full-stack web app for volleyball coaches and players to visualize, customize,
 - [How it works end-to-end](#how-it-works-end-to-end)
 - [Setup instructions](#setup-instructions)
 - [Environment variables](#environment-variables)
-- [Authorship](#authorship)
-- [Known limitations and future improvements](#known-limitations-and-future-improvements)
+- [Future improvements](#future-improvements)
 
 ---
 
