@@ -139,6 +139,28 @@ function AppViewContent({
       setPlanAheadConfigIdA(null);
     }
   }, [visualizer.user]);
+
+  useEffect(() => {
+    if (planAheadLineupIdA && !lineup.savedLineups.some((l) => l.id === planAheadLineupIdA)) {
+      setPlanAheadLineupIdA(null);
+      setPlanAheadLineupA({});
+    }
+  }, [planAheadLineupIdA, lineup.savedLineups]);
+
+  useEffect(() => {
+    const isCustomConfig =
+      planAheadConfigIdA && planAheadConfigIdA !== "5-1-default" && planAheadConfigIdA !== "6-2-default";
+    if (isCustomConfig && !configSave.customConfigs.some((c) => c.id === planAheadConfigIdA)) {
+      setPlanAheadConfigIdA(null);
+    }
+  }, [planAheadConfigIdA, configSave.customConfigs]);
+
+  useEffect(() => {
+    if (planAheadLineupIdA && lineup.selectedLineupId === planAheadLineupIdA) {
+      setPlanAheadLineupA(lineup.lineup);
+    }
+  }, [planAheadLineupIdA, lineup.selectedLineupId, lineup.lineup]);
+
   const [planAheadLiberoTargetIdA, setPlanAheadLiberoTargetIdA] = useState<string | null>(null);
   const [planAheadLiberoTargetIdB, setPlanAheadLiberoTargetIdB] = useState<string | null>(null);
   const [planAheadLiberoModalTeam, setPlanAheadLiberoModalTeam] = useState<"A" | "B" | null>(null);

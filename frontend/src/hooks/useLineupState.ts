@@ -85,12 +85,15 @@ export function useLineupState(
       if (!u) return;
       try {
         const token = await u.getIdToken(true);
-        await lineupsApi.update(token, selectedLineupId!, {
+        const updated = await lineupsApi.update(token, selectedLineupId!, {
           name: item!.name,
           lineup,
           showNumber: lineupShowNumber,
           showName: lineupShowName,
         });
+        setLineup((updated?.lineup ?? lineup) as Lineup);
+        setLineupShowNumber(updated?.showNumber ?? lineupShowNumber);
+        setLineupShowName(updated?.showName ?? lineupShowName);
         await fetchSavedLineups();
         showToast("Lineup saved.", "success");
       } catch (err) {
@@ -141,6 +144,7 @@ export function useLineupState(
           await lineupsApi.delete(token, id);
           if (selectedLineupId === id) {
             setSelectedLineupId(null);
+            setLineup({});
           }
           await fetchSavedLineups();
           showToast("Lineup deleted.", "success");

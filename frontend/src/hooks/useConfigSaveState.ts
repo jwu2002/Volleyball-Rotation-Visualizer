@@ -69,15 +69,15 @@ export function useConfigSaveState(
           };
           const token = await currentUser.getIdToken(true);
           await configsApi.update(token, id, { system: payload.system, rotations: payload.rotations });
-          showToast("Configuration updated.", "success");
           await savedData.fetchCustomConfigs();
+          showToast("Configuration updated.", "success");
         } catch (err) {
           console.error("Error overwriting config:", err);
           showToast("Failed to overwrite configuration.", "error");
         }
       }
     );
-  }, [court.customConfigKey, court.system, court.rotationData, savedData.fetchCustomConfigs, showToast, showConfirm]);
+  }, [court.customConfigKey, court.system, court.rotationData, court.serveAnnotationsData, savedData.fetchCustomConfigs, showToast, showConfirm]);
 
   const handleDeleteConfig = useCallback(
     (id: string) => {
