@@ -3,7 +3,9 @@
 A full-stack web app for volleyball coaches and players to visualize, customize, and save rotation diagrams — replacing paper and whiteboard sketches with an interactive, exportable digital tool.
 
 **Link:** https://volleyballrotationsvisualizer.vercel.app/
+
 **Demo:** https://www.youtube.com/watch?v=ri8m4e22H6w
+
 **Demo account:** Available on request
 
 ---
@@ -41,13 +43,13 @@ Here is a real plan that my coach sent to me as a player:
 
 <img src="images/example_plan.jpg" width="700">
 
-5–1 Basics
+### 5–1 Basics
 [![5-1 Volleyball Rotation Basics](https://img.youtube.com/vi/pi7Lf6uO7dE/0.jpg)](https://www.youtube.com/watch?v=pi7Lf6uO7dE)
 
-6–2 Basics
+### 6–2 Basics
 [![6-2 Volleyball Rotation Basics](https://img.youtube.com/vi/Prfbkz73d3Q/0.jpg)](https://www.youtube.com/watch?v=Prfbkz73d3Q)
 
-Credit [SD Volleyball Videos](https://www.youtube.com/@SDVolleyballVideos)
+**Credit:** [SD Volleyball Videos](https://www.youtube.com/@SDVolleyballVideos)
 
 
 ## Features
