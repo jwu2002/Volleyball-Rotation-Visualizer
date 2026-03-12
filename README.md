@@ -20,7 +20,6 @@ A full-stack web app for volleyball coaches and players to visualize, customize,
 - [Key design decisions](#key-design-decisions)
 - [How it works end-to-end](#how-it-works-end-to-end)
 - [Setup instructions](#setup-instructions)
-- [Project structure](#project-structure)
 - [Environment variables](#environment-variables)
 - [Authorship](#authorship)
 - [Known limitations and future improvements](#known-limitations-and-future-improvements)
@@ -88,7 +87,7 @@ Browser (Vercel)
 │   ├── Firebase Auth SDK (ID token management)
 │   └── pdf-lib (PDF generation, client-side)
 │
-└── Firebase token on every API request
+└── Firebase bearer token on every API request
         │
         ▼
 Railway (FastAPI)
@@ -101,7 +100,7 @@ Supabase (PostgreSQL)
 └── visualizer_configs (user_id, name, system, rotations JSONB)
 ```
 
-The frontend is a static single page application deployed on Vercel. When the user signs in, Firebase issues an ID token that the frontend attaches to every backend request. The backend verifies the token against Firebase's public endpoint — no sessions. Data is stored in PostgreSQL on Supabase, keyed by Firebase `uid`.
+The frontend is a static single page application deployed on Vercel. When the user signs in, Firebase issues an ID token that the frontend attaches to every backend request. The backend verifies the token against Firebase's public endpoint — no sessions. From that, the backend can retreive the user's firebase UID. Data is stored in PostgreSQL on Supabase, keyed by Firebase `uid`.
 
 ---
 
@@ -130,16 +129,16 @@ PDF export is handled entirely in the browser with `pdf-lib`. This keeps the bac
 
 ### Managed infrastructure
 
-Vercel (frontend), Railway (backend), and Supabase (database) were chosen for minimal operational overhead and free tiers. The tradeoff is reduced control and customization. At current scale this is good enough; migrating to self-managed infrastructure something I will do if scale requires it.
+Vercel (frontend), Railway (backend), and Supabase (database) were chosen for minimal operational overhead and free tiers. The tradeoff is reduced control and customization. At current scale this is good enough; migrating to self-managed infrastructure is something I will do if scale requires it.
 
 ---
 
 ## How it works end-to-end
 
-1. Browser fetches the React app from Vercel. Firebase SDK initializes and restores auth state from local storage if the user was previously signed in.
+1. Browser fetches the React app from Vercel.
 2. User can use the visualizer and plan-ahead immediately.
-3. When a user successfully authenticates, Firebase issues an ID token (JWT, 1-hour expiry, auto-refreshed by the SDK). The frontend stores this and attaches it as a Bearer token on every API request.
-4. User selects a system (5-1 or 6-2) and rotation (1–6), optionally loads a saved lineup, and drags players on the court. Rotation rules are enforced client-side. Annotations (arrows, freehand paths) are stored in component state.
+3. When a user successfully authenticates, Firebase issues an ID token (JWT, 1-hour expiry, auto-refreshed by the SDK). The frontend stores this and attaches it as a bearer token on every API request. The backend is able to obtain the user's firebase UID with this token with a public endpoint.
+4. User selects a system (5-1 or 6-2) and rotation (1–6), optionally loads a saved lineup, and drags players on the court. Rotation rules are enforced client-side. Annotations (arrows, freehand drawings) are stored in component state.
 5. Lineup and config saves hit `POST /lineups` or `POST /configs`. The backend verifies the token, extracts `uid`, and writes to Postgres. Subsequent loads hit `GET /lineups` or `GET /configs`, filtered by `uid`.
 6. In the plan ahead tab, the user sets two teams (lineup, system, starting rotation, serve side). Two read-only courts render side by side, showing blocking and serving matchups.
 7. `pdf-lib` renders the current rotation tables and court diagrams in the browser and either downloads the PDF or shows a preview.
@@ -232,39 +231,6 @@ cd frontend && npm run dev
 ```
 
 Open `http://localhost:5173`.
-
----
-
-## Project structure
-
-```
-Volleyball-Rotation-Visualizer/
-├── frontend/
-│   ├── src/
-│   │   ├── api/              # Backend API client (lineups, configs)
-│   │   ├── components/       # Court, PlanAhead, Modals, AppHeader, etc.
-│   │   ├── contexts/         # CourtContext, LineupContext, AnnotationsContext, etc.
-│   │   ├── data/             # Default 5-1 / 6-2 rotation data
-│   │   ├── hooks/            # useAuth, useCourtState, useAnnotationsState, etc.
-│   │   ├── styles/           # CSS per view/component
-│   │   ├── types/            # savedConfig types
-│   │   ├── utils/            # lineupHelpers, visualizerRotations, exportPdf, etc.
-│   │   ├── App.tsx
-│   │   ├── firebaseConfig.ts
-│   │   └── constants.ts
-│   ├── vercel.json
-│   └── package.json
-├── backend/
-│   ├── api/
-│   │   ├── deps.py           # Auth dependency
-│   │   └── routes/           # lineups.py, configs.py
-│   ├── db/                   # session.py, base.py
-│   ├── models/               # Lineup, VisualizerConfig ORM models
-│   ├── schemas/              # Pydantic Create / Update / Out schemas
-│   ├── config.py
-│   └── main.py
-└── README.md
-```
 
 ---
 
