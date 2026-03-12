@@ -234,19 +234,6 @@ Open `http://localhost:5173`.
 
 ---
 
-## Environment variables
-
-| Variable | Where | Purpose |
-|----------|-------|---------|
-| `VITE_API_URL` | Frontend | Backend base URL |
-| `VITE_FIREBASE_*` | Frontend | Firebase project config (7 vars from Firebase Console) |
-| `DATABASE_URL` | Backend | Postgres connection string (Supabase session pooler, port 6543) |
-| `FIREBASE_PROJECT_ID` | Backend | Firebase project ID for JWT verification |
-| `CORS_ORIGINS` | Backend | Comma-separated allowed origins (e.g. Vercel URL) |
-| `RATE_LIMIT` | Backend | Default `20/minute` |
-
----
-
 ## Future improvements
 
 **Future improvements**
