@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { PlanAhead } from "./components/PlanAhead";
 import { VisualizerView } from "./components/VisualizerView";
 import type { Lineup } from "./components/StartingLineup";
@@ -16,6 +16,7 @@ import { useCourtContext } from "./contexts/CourtContext";
 import { useLineupContext } from "./contexts/LineupContext";
 import { useConfigSaveContext } from "./contexts/ConfigSaveContext";
 import { useExportContext } from "./contexts/ExportContext";
+import { useVisualizerContext } from "./contexts/VisualizerContext";
 
 function App() {
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
@@ -118,6 +119,7 @@ function AppViewContent({
   const lineup = useLineupContext();
   const configSave = useConfigSaveContext();
   const exportCtx = useExportContext();
+  const visualizer = useVisualizerContext();
 
   const [planAheadServeTeam, setPlanAheadServeTeam] = useState<"A" | "B">("A");
   const [planAheadSystemA, setPlanAheadSystemA] = useState<"5-1" | "6-2">("5-1");
@@ -128,6 +130,15 @@ function AppViewContent({
   const [planAheadRotationB, setPlanAheadRotationB] = useState(1);
   const [planAheadLineupIdA, setPlanAheadLineupIdA] = useState<string | null>(null);
   const [planAheadConfigIdA, setPlanAheadConfigIdA] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!visualizer.user || visualizer.user.isAnonymous) {
+      setPlanAheadLineupA({});
+      setPlanAheadLineupB({});
+      setPlanAheadLineupIdA(null);
+      setPlanAheadConfigIdA(null);
+    }
+  }, [visualizer.user]);
   const [planAheadLiberoTargetIdA, setPlanAheadLiberoTargetIdA] = useState<string | null>(null);
   const [planAheadLiberoTargetIdB, setPlanAheadLiberoTargetIdB] = useState<string | null>(null);
   const [planAheadLiberoModalTeam, setPlanAheadLiberoModalTeam] = useState<"A" | "B" | null>(null);

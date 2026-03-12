@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { Lineup, LineupEntry, LineupPositionId } from "../components/StartingLineup";
 import { auth } from "../firebaseConfig";
 import { lineupsApi } from "../api/client";
@@ -27,6 +27,12 @@ export function useLineupState(
   const [showSaveLineupModal, setShowSaveLineupModal] = useState(false);
   const [saveLineupName, setSaveLineupName] = useState("");
   const [lineupExplorerOpen, setLineupExplorerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user || user.isAnonymous) {
+      setLineup({});
+    }
+  }, [user]);
 
   const handleLineupChange = useCallback((position: LineupPositionId, entry: LineupEntry) => {
     setLineup((prev) => ({ ...prev, [position]: entry }));
