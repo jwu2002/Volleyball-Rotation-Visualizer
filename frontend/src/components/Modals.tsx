@@ -9,27 +9,24 @@ export function SaveConfigModal(props: {
   open: boolean;
   name: string;
   system: "5-1" | "6-2";
-  currentRotation: number;
-  saveMode: "one" | "multi";
-  saveRotationOne: number;
   saveRotationsMulti: boolean[];
   onNameChange: (v: string) => void;
   onSystemChange: (v: "5-1" | "6-2") => void;
-  onSaveModeChange: (mode: "one" | "multi") => void;
-  onSaveRotationOneChange: (r: number) => void;
   onSaveRotationsMultiChange: (index: number, checked: boolean) => void;
+  onCheckAllRotations: (checked: boolean) => void;
   onSave: () => void;
   onClose: () => void;
 }) {
   if (!props.open) return null;
-  const selectedMulti = props.saveRotationsMulti.map((v, i) => (v ? i + 1 : 0)).filter(Boolean);
+  const selectedCount = props.saveRotationsMulti.filter(Boolean).length;
+  const allChecked = selectedCount === 6;
   return (
     <div className="modal-overlay">
       <div className="modal-panel save-config-modal-panel">
         <h3 className="modal-title">Save Configuration</h3>
         <input
           type="text"
-          placeholder="Enter name (rotation prefix will be added)"
+          placeholder="Enter name"
           value={props.name}
           onChange={(e) => props.onNameChange(e.target.value)}
           className="modal-input"
@@ -50,39 +47,10 @@ export function SaveConfigModal(props: {
         </div>
 
         <div className="modal-section">
-          <label className="modal-section-label">Save 1 rotation</label>
-          <label className="save-config-option-row">
-            <input
-              type="radio"
-              name="saveConfigMode"
-              checked={props.saveMode === "one"}
-              onChange={() => props.onSaveModeChange("one")}
-            />
-            <span>Save current court as rotation</span>
-            <select
-              value={props.saveRotationOne}
-              onChange={(e) => props.onSaveRotationOneChange(Number(e.target.value))}
-              disabled={props.saveMode !== "one"}
-            >
-              {[1, 2, 3, 4, 5, 6].map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="modal-section">
-          <label className="modal-section-label">Save multiple rotations</label>
-          <label className="save-config-option-row" style={{ marginBottom: 8 }}>
-            <input
-              type="radio"
-              name="saveConfigMode"
-              checked={props.saveMode === "multi"}
-              onChange={() => props.onSaveModeChange("multi")}
-            />
-            <span>Save selected rotations (current configs/drawings for checked slots)</span>
-          </label>
-          <p className="modal-description" style={{ marginBottom: 8 }}>Check the rotations to save:</p>
+          <label className="modal-section-label">Rotations to save</label>
+          <p className="modal-description" style={{ marginBottom: 8 }}>
+            Select which rotations to save (each includes both serve and receive drawings).
+          </p>
           <div className="save-config-multi-checkboxes">
             {[1, 2, 3, 4, 5, 6].map((r) => (
               <label key={r} className="save-config-check-label">
@@ -90,7 +58,6 @@ export function SaveConfigModal(props: {
                   type="checkbox"
                   checked={props.saveRotationsMulti[r - 1]}
                   onChange={(e) => props.onSaveRotationsMultiChange(r - 1, e.target.checked)}
-                  disabled={props.saveMode !== "multi"}
                 />
                 <span>{r}</span>
               </label>
@@ -98,25 +65,24 @@ export function SaveConfigModal(props: {
           </div>
           <button
             type="button"
-            className="btn btn-success save-config-all-btn"
-            disabled={props.saveMode !== "multi" || selectedMulti.length === 0}
-            onClick={props.onSave}
+            className="btn btn-secondary save-config-check-all-btn"
+            onClick={() => props.onCheckAllRotations(!allChecked)}
           >
-            Save all rotations
+            {allChecked ? "Uncheck all" : "Check all"}
           </button>
         </div>
 
-        {props.saveMode === "one" && (
-          <div className="modal-actions">
-            <button type="button" className="btn btn-success" onClick={props.onSave}>Save</button>
-            <button type="button" className="btn btn-secondary" onClick={props.onClose}>Cancel</button>
-          </div>
-        )}
-        {props.saveMode === "multi" && (
-          <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={props.onClose}>Cancel</button>
-          </div>
-        )}
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="btn btn-success"
+            disabled={selectedCount === 0}
+            onClick={props.onSave}
+          >
+            Save
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={props.onClose}>Cancel</button>
+        </div>
       </div>
     </div>
   );

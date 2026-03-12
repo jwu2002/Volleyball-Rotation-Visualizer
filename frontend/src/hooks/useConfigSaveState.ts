@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { auth } from "../firebaseConfig";
 import { configsApi } from "../api/client";
 import type { RotationSnapshot, SavedVisualizerConfig } from "../types/savedConfig";
-import { getDefaultRotationDataInitial } from "../utils/visualizerRotations";
+import { getDefaultRotationDataInitial, getRotationSet } from "../utils/visualizerRotations";
 import { sanitizeName } from "../utils/nameSanitize";
 import type { Player } from "../utils/visualizerRotations";
 import type { Annotation } from "../components/Court";
@@ -13,7 +13,10 @@ export function useConfigSaveState(
   user: { uid: string; isAnonymous?: boolean; email?: string | null } | null,
   court: {
     system: "5-1" | "6-2";
+    serveReceive: boolean;
     rotationData: RotationSnapshot[];
+    serveAnnotationsData: Annotation[][];
+    setServeAnnotationsData: React.Dispatch<React.SetStateAction<Annotation[][]>>;
     players: Player[];
     annotations: Annotation[];
     rotation: number;
@@ -31,14 +34,13 @@ export function useConfigSaveState(
     fetchCustomConfigs: () => Promise<void>;
   },
   showToast: (message: string, type?: ToastType) => void,
-  showConfirm: (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => void
+  showConfirm: (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => void,
+  onSaveSuccess?: () => void
 ) {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [newName, setNewName] = useState("");
   const [newSystem, setNewSystem] = useState<"5-1" | "6-2">("5-1");
   const [newRotation, setNewRotation] = useState<number>(1);
-  const [saveConfigMode, setSaveConfigMode] = useState<"one" | "multi">("one");
-  const [saveRotationOne, setSaveRotationOne] = useState<number>(1);
   const [saveRotationsMulti, setSaveRotationsMulti] = useState<boolean[]>([false, false, false, false, false, false]);
 
   const handleOverwriteCurrentConfig = useCallback(() => {
@@ -59,9 +61,10 @@ export function useConfigSaveState(
         try {
           const payload = {
             system: court.system,
-            rotations: court.rotationData.map((r) => ({
+            rotations: court.rotationData.map((r, i) => ({
               players: JSON.parse(JSON.stringify(r.players)),
               annotations: JSON.parse(JSON.stringify(r.annotations)),
+              serveAnnotations: JSON.parse(JSON.stringify(court.serveAnnotationsData[i] ?? [])),
             })),
           };
           const token = await currentUser.getIdToken(true);
@@ -118,25 +121,20 @@ export function useConfigSaveState(
     }
     const name = sanitizeName(trimmedName);
     const defaultData = getDefaultRotationDataInitial(newSystem);
-    let rotationsToSave: RotationSnapshot[];
-    if (saveConfigMode === "one") {
-      rotationsToSave = defaultData.map((r, i) =>
-        i === saveRotationOne - 1
-          ? { players: JSON.parse(JSON.stringify(court.players)), annotations: JSON.parse(JSON.stringify(court.annotations)) }
-          : { players: JSON.parse(JSON.stringify(r.players)), annotations: [...(r.annotations || [])] }
-      );
-    } else {
-      const selected = saveRotationsMulti.map((v, i) => (v ? i + 1 : 0)).filter(Boolean);
-      if (selected.length === 0) {
-        showToast("Select at least one rotation to save.", "info");
-        return;
-      }
-      rotationsToSave = defaultData.map((r, i) =>
-        saveRotationsMulti[i]
-          ? { players: JSON.parse(JSON.stringify(court.rotationData[i].players)), annotations: JSON.parse(JSON.stringify(court.rotationData[i].annotations)) }
-          : { players: JSON.parse(JSON.stringify(r.players)), annotations: [...(r.annotations || [])] }
-      );
+    const selected = saveRotationsMulti.map((v, i) => (v ? i + 1 : 0)).filter(Boolean);
+    if (selected.length === 0) {
+      showToast("Select at least one rotation to save.", "info");
+      return;
     }
+    const rotationsToSave: RotationSnapshot[] = defaultData.map((r, i) =>
+      saveRotationsMulti[i]
+        ? {
+            players: JSON.parse(JSON.stringify(court.rotationData[i].players)),
+            annotations: JSON.parse(JSON.stringify(court.rotationData[i].annotations)),
+            serveAnnotations: JSON.parse(JSON.stringify(court.serveAnnotationsData[i] ?? [])),
+          }
+        : { players: JSON.parse(JSON.stringify(r.players)), annotations: [...(r.annotations || [])] }
+    );
     try {
       const payload = {
         system: newSystem,
@@ -159,14 +157,24 @@ export function useConfigSaveState(
       setShowSaveModal(false);
       setNewName("");
       setSaveRotationsMulti([false, false, false, false, false, false]);
+      onSaveSuccess?.();
       await savedData.fetchCustomConfigs();
       court.setCustomConfigKey(`custom:${saved.id}`);
       court.setSystem(newSystem);
-      court.setRotation(saveConfigMode === "one" ? saveRotationOne : 1);
-      const snap = rotationsToSave[saveConfigMode === "one" ? saveRotationOne - 1 : 0];
+      const firstSelected = selected[0] ?? 1;
+      court.setRotation(firstSelected);
       court.setRotationData(rotationsToSave.map((r) => ({ players: JSON.parse(JSON.stringify(r.players)), annotations: JSON.parse(JSON.stringify(r.annotations)) })));
-      court.setPlayers(JSON.parse(JSON.stringify(snap.players)) as Player[]);
-      court.setAnnotations(JSON.parse(JSON.stringify(snap.annotations)) as Annotation[]);
+      court.setServeAnnotationsData(
+        rotationsToSave.map((r) => JSON.parse(JSON.stringify(r.serveAnnotations ?? [])) as Annotation[])
+      );
+      const snap = rotationsToSave[firstSelected - 1];
+      if (court.serveReceive) {
+        court.setPlayers(JSON.parse(JSON.stringify(snap.players)) as Player[]);
+        court.setAnnotations(JSON.parse(JSON.stringify(snap.annotations)) as Annotation[]);
+      } else {
+        court.setPlayers(JSON.parse(JSON.stringify(getRotationSet(newSystem)[firstSelected - 1])) as Player[]);
+        court.setAnnotations(JSON.parse(JSON.stringify(snap.serveAnnotations ?? [])) as Annotation[]);
+      }
     } catch (err: unknown) {
       console.error("Error saving config:", err);
       showToast(err instanceof Error ? err.message : "Failed to save configuration.", "error");
@@ -176,12 +184,11 @@ export function useConfigSaveState(
     showToast,
     newName,
     newSystem,
-    saveConfigMode,
-    saveRotationOne,
     saveRotationsMulti,
-    court.players,
-    court.annotations,
+    court.serveReceive,
     court.rotationData,
+    court.serveAnnotationsData,
+    court.setServeAnnotationsData,
     court.setCustomConfigKey,
     court.setSystem,
     court.setRotation,
@@ -189,6 +196,7 @@ export function useConfigSaveState(
     court.setPlayers,
     court.setAnnotations,
     savedData.fetchCustomConfigs,
+    onSaveSuccess,
   ]);
 
   return {
@@ -200,10 +208,6 @@ export function useConfigSaveState(
     setNewSystem,
     newRotation,
     setNewRotation,
-    saveConfigMode,
-    setSaveConfigMode,
-    saveRotationOne,
-    setSaveRotationOne,
     saveRotationsMulti,
     setSaveRotationsMulti,
     handleSaveNewConfig,

@@ -59,6 +59,7 @@ function App() {
   } = useAuth({ showToast });
 
   const [activeView, setActiveView] = useState<"court" | "planAhead">("court");
+  const [customConfigKey, setCustomConfigKey] = useState("");
 
   return (
     <div className="app">
@@ -74,9 +75,12 @@ function App() {
           onGoogleSignIn={handleGoogleSignIn}
           onEmailSignUp={handleEmailSignUp}
           onEmailSignIn={handleEmailSignIn}
-          onSignOut={handleSignOut}
+          onSignOut={() => {
+            setCustomConfigKey("");
+            handleSignOut();
+          }}
         />
-        <VisualizerProvider user={user} activeView={activeView} showToast={showToast} showConfirm={showConfirm}>
+        <VisualizerProvider customConfigKey={customConfigKey} onCustomConfigKeyChange={setCustomConfigKey} user={user} activeView={activeView} showToast={showToast} showConfirm={showConfirm}>
           <AppViewContent activeView={activeView} setActiveView={setActiveView} showToast={showToast} />
         </VisualizerProvider>
         {toast && (
@@ -234,10 +238,14 @@ function AppViewContent({
   }, [planAheadServeTeam, planAheadLineupB, planAheadSystemB, getPlayersForRotation, planAheadLiberoTargetIdB]);
 
   const planAheadAnnotationsA = useMemo(() => {
-    if (planAheadServeTeam !== "B" || !planAheadConfigIdA) return [];
+    if (!planAheadConfigIdA) return [];
     const config = configSave.customConfigs.find((c) => c.id === planAheadConfigIdA);
     const snap = config?.rotations?.[planAheadRotationA - 1];
-    return Array.isArray(snap?.annotations) ? snap.annotations : [];
+    if (!snap) return [];
+    if (planAheadServeTeam === "B") {
+      return Array.isArray(snap.annotations) ? snap.annotations : [];
+    }
+    return Array.isArray(snap.serveAnnotations) ? snap.serveAnnotations : [];
   }, [planAheadServeTeam, planAheadConfigIdA, planAheadRotationA, configSave.customConfigs]);
 
   const handlePlanAheadLineupASelect = useCallback(
@@ -389,16 +397,14 @@ function AppViewContent({
         open={configSave.showSaveModal}
         name={configSave.newName}
         system={configSave.newSystem}
-        currentRotation={configSave.rotation}
-        saveMode={configSave.saveConfigMode}
-        saveRotationOne={configSave.saveRotationOne}
         saveRotationsMulti={configSave.saveRotationsMulti}
         onNameChange={configSave.setNewName}
         onSystemChange={configSave.setNewSystem}
-        onSaveModeChange={configSave.setSaveConfigMode}
-        onSaveRotationOneChange={configSave.setSaveRotationOne}
         onSaveRotationsMultiChange={(index, checked) =>
           configSave.setSaveRotationsMulti((prev: boolean[]) => prev.map((v: boolean, i: number) => (i === index ? checked : v)))
+        }
+        onCheckAllRotations={(checked) =>
+          configSave.setSaveRotationsMulti([checked, checked, checked, checked, checked, checked])
         }
         onSave={configSave.handleSaveNewConfig}
         onClose={() => configSave.setShowSaveModal(false)}

@@ -17,15 +17,17 @@ import { COURT_WIDTH, COURT_HEIGHT } from "../constants";
 type ToastType = "success" | "error" | "info";
 
 export function useCourtState(
-  user: { uid: string; isAnonymous?: boolean; email?: string | null } | null,
+  _user: { uid: string; isAnonymous?: boolean; email?: string | null } | null,
   activeView: "court" | "planAhead",
   customConfigs: SavedVisualizerConfig[],
   options: {
     showToast: (message: string, type?: ToastType) => void;
     clearAnnotationSelectionRef: RefObject<(() => void) | undefined>;
+    controlledConfigKey?: { value: string; setValue: (v: string) => void };
+    clearDrawModeRef?: RefObject<(() => void) | null>;
   }
 ) {
-  const { showToast, clearAnnotationSelectionRef } = options;
+  const { showToast, clearAnnotationSelectionRef, controlledConfigKey, clearDrawModeRef } = options;
   const clearSel = () => clearAnnotationSelectionRef.current?.();
 
   const mainContentRef = useRef<HTMLDivElement>(null);
@@ -47,21 +49,16 @@ export function useCourtState(
   const [serveAnnotationsData, setServeAnnotationsData] = useState<Annotation[][]>(() =>
     Array.from({ length: 6 }, () => [])
   );
-  const [customConfigKey, setCustomConfigKey] = useState<string>("");
+  const [internalConfigKey, setInternalConfigKey] = useState<string>("");
+  const customConfigKey = controlledConfigKey?.value ?? internalConfigKey;
+  const setCustomConfigKey = controlledConfigKey?.setValue ?? setInternalConfigKey;
   const [showLiberoModal, setShowLiberoModal] = useState(false);
   const [liberoTargetId, setLiberoTargetId] = useState<string | null>(null);
   const [showOutOfRotation, setShowOutOfRotation] = useState(false);
   const [outOfRotationMessage, setOutOfRotationMessage] = useState("");
   const [revertKey, setRevertKey] = useState(0);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
-
-  useEffect(() => {
-    if (!user) {
-      setCustomConfigKey("");
-      setSystem("5-1");
-      setRotation(1);
-    }
-  }, [user]);
+  const prevConfigKeyRef = useRef<string>(customConfigKey);
 
   useEffect(() => {
     if (!serveReceive) return;
@@ -114,8 +111,23 @@ export function useCourtState(
     [serveReceive]
   );
 
+  useEffect(() => {
+    if (customConfigKey !== "" || prevConfigKeyRef.current === "") {
+      prevConfigKeyRef.current = customConfigKey;
+      return;
+    }
+    prevConfigKeyRef.current = "";
+    clearDrawModeRef?.current?.();
+    setRotationData(getDefaultRotationDataInitial(system));
+    setServeAnnotationsData(Array.from({ length: 6 }, () => []));
+    setAnnotations([]);
+    clearSel();
+    updatePlayers(system, rotation);
+  }, [customConfigKey, system, rotation, updatePlayers, clearDrawModeRef]);
+
   const loadConfigFromKey = useCallback(
     (value: string) => {
+      clearDrawModeRef?.current?.();
       if (!value) {
         setAnnotations([]);
         clearSel();
@@ -133,8 +145,13 @@ export function useCourtState(
           setRotationData(data);
           setServeAnnotationsData(Array.from({ length: 6 }, () => []));
           const snap = data[rotation - 1];
-          setPlayers(JSON.parse(JSON.stringify(snap.players)) as Player[]);
-          setAnnotations([]);
+          if (serveReceive) {
+            setPlayers(JSON.parse(JSON.stringify(snap.players)) as Player[]);
+            setAnnotations([]);
+          } else {
+            setPlayers(JSON.parse(JSON.stringify(getRotationSet(def.system as "5-1" | "6-2")[rotation - 1])));
+            setAnnotations([]);
+          }
           clearSel();
         }
         return;
@@ -144,18 +161,28 @@ export function useCourtState(
         const cfg = customConfigs.find((c) => c.id === id) as SavedVisualizerConfig | undefined;
         if (cfg) {
           let data: RotationSnapshot[];
+          let serveData: Annotation[][] = [];
           if (Array.isArray(cfg.rotations) && cfg.rotations.length === 6) {
+            const mapAnn = (arr: unknown[]): Annotation[] =>
+              arr.map((a: unknown) => {
+                const x = a as { type?: string; points?: number[]; stroke?: string; pointerAtBeginning?: boolean; pointerAtEnding?: boolean; tension?: number };
+                return {
+                  type: x.type === "arrow" ? ("arrow" as const) : ("path" as const),
+                  points: Array.isArray(x.points) ? x.points : [],
+                  stroke: typeof x.stroke === "string" ? x.stroke : undefined,
+                  pointerAtBeginning: x.pointerAtBeginning === true,
+                  pointerAtEnding: x.pointerAtEnding !== false,
+                  tension: typeof x.tension === "number" ? x.tension : undefined,
+                };
+              });
             data = cfg.rotations.map((r) => ({
               players: JSON.parse(JSON.stringify(r.players)) as Player[],
-              annotations: (Array.isArray(r.annotations) ? r.annotations : []).map((a: { type?: string; points?: number[]; stroke?: string; pointerAtBeginning?: boolean; pointerAtEnding?: boolean; tension?: number }) => ({
-                type: a.type === "arrow" ? ("arrow" as const) : ("path" as const),
-                points: Array.isArray(a.points) ? a.points : [],
-                stroke: typeof a.stroke === "string" ? a.stroke : undefined,
-                pointerAtBeginning: a.pointerAtBeginning === true,
-                pointerAtEnding: a.pointerAtEnding !== false,
-                tension: typeof a.tension === "number" ? a.tension : undefined,
-              })),
+              annotations: mapAnn(Array.isArray(r.annotations) ? r.annotations : []),
             }));
+            serveData = cfg.rotations.map((r) =>
+              mapAnn(Array.isArray((r as { serveAnnotations?: unknown[] }).serveAnnotations) ? (r as { serveAnnotations: unknown[] }).serveAnnotations : [])
+            );
+            setServeAnnotationsData(serveData);
           } else {
             const defaultData = getDefaultRotationDataInitial(cfg.system ?? "5-1");
             data = defaultData.map((r, i) =>
@@ -178,12 +205,18 @@ export function useCourtState(
                   }
                 : r
             );
+            setServeAnnotationsData(Array.from({ length: 6 }, () => []));
           }
           setRotationData(data);
-          setServeAnnotationsData(Array.from({ length: 6 }, () => []));
           const snap = data[rotation - 1];
-          setPlayers(JSON.parse(JSON.stringify(snap.players)) as Player[]);
-          setAnnotations(JSON.parse(JSON.stringify(snap.annotations)) as Annotation[]);
+          const sys = (cfg.system ?? "5-1") as "5-1" | "6-2";
+          if (serveReceive) {
+            setPlayers(JSON.parse(JSON.stringify(snap.players)) as Player[]);
+            setAnnotations(JSON.parse(JSON.stringify(snap.annotations)) as Annotation[]);
+          } else {
+            setPlayers(JSON.parse(JSON.stringify(getRotationSet(sys)[rotation - 1])));
+            setAnnotations(JSON.parse(JSON.stringify(serveData[rotation - 1] ?? [])) as Annotation[]);
+          }
           clearSel();
         }
         return;
@@ -195,7 +228,7 @@ export function useCourtState(
       const newRot = Number(rotStr);
       updatePlayers(newSys, newRot);
     },
-    [customConfigs, rotation, system, updatePlayers]
+    [customConfigs, rotation, system, serveReceive, updatePlayers, clearDrawModeRef]
   );
 
   const handleSystemChange = useCallback(

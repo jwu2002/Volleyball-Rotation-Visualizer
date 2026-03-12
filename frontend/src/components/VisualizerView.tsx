@@ -81,13 +81,9 @@ export type VisualizerViewContext = {
   newName: string;
   newSystem: "5-1" | "6-2";
   newRotation: number;
-  saveConfigMode: "one" | "multi";
-  saveRotationOne: number;
   saveRotationsMulti: boolean[];
   setNewName: (v: string) => void;
   setShowSaveModal: (v: boolean) => void;
-  setSaveConfigMode: (v: "one" | "multi") => void;
-  setSaveRotationOne: (v: number) => void;
   setSaveRotationsMulti: React.Dispatch<React.SetStateAction<boolean[]>>;
   handleSaveNewConfig: () => void;
   handleOverwriteCurrentConfig: () => void;
@@ -466,9 +462,8 @@ export function VisualizerView() {
                                 }
                                 configSave.setNewSystem(sys);
                                 configSave.setNewRotation(rot);
-                                configSave.setSaveConfigMode("one");
-                                configSave.setSaveRotationOne(court.rotation);
-                                configSave.setSaveRotationsMulti([false, false, false, false, false, false]);
+                                const r = court.rotation;
+                                configSave.setSaveRotationsMulti([r === 1, r === 2, r === 3, r === 4, r === 5, r === 6]);
                                 configSave.setShowSaveModal(true);
                               }}
                               >

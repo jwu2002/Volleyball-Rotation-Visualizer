@@ -18,13 +18,15 @@ type ToastType = "success" | "error" | "info";
 
 type Props = {
   children: React.ReactNode;
+  customConfigKey: string;
+  onCustomConfigKeyChange: (value: string) => void;
   user: { uid: string; isAnonymous?: boolean; email?: string | null } | null;
   activeView: "court" | "planAhead";
   showToast: (message: string, type?: ToastType) => void;
   showConfirm: (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => void;
 };
 
-export function VisualizerProvider({ children, user, activeView, showToast, showConfirm }: Props) {
+export function VisualizerProvider({ children, customConfigKey, onCustomConfigKeyChange, user, activeView, showToast, showConfirm }: Props) {
   const {
     savedLineups,
     customConfigs,
@@ -35,9 +37,12 @@ export function VisualizerProvider({ children, user, activeView, showToast, show
   } = useSavedData(user, { showToast });
 
   const clearAnnotationSelectionRef = useRef<(() => void) | undefined>(undefined);
+  const clearDrawModeRef = useRef<(() => void) | null>(null);
   const courtState = useCourtState(user, activeView, customConfigs, {
     showToast,
     clearAnnotationSelectionRef,
+    controlledConfigKey: { value: customConfigKey, setValue: onCustomConfigKeyChange },
+    clearDrawModeRef,
   });
 
   const annotationsState = useAnnotationsState(courtState.annotations, courtState.setAnnotations);
@@ -47,6 +52,12 @@ export function VisualizerProvider({ children, user, activeView, showToast, show
       clearAnnotationSelectionRef.current = undefined;
     };
   }, [annotationsState.setSelectedAnnotationIndices]);
+  useEffect(() => {
+    clearDrawModeRef.current = () => annotationsState.setDrawMode(false);
+    return () => {
+      clearDrawModeRef.current = null;
+    };
+  }, [annotationsState.setDrawMode]);
 
   const lineupState = useLineupState(
     user,
@@ -60,6 +71,9 @@ export function VisualizerProvider({ children, user, activeView, showToast, show
     {
       system: courtState.system,
       rotationData: courtState.rotationData,
+      serveReceive: courtState.serveReceive,
+      serveAnnotationsData: courtState.serveAnnotationsData,
+      setServeAnnotationsData: courtState.setServeAnnotationsData,
       players: courtState.players,
       annotations: courtState.annotations,
       rotation: courtState.rotation,
@@ -74,7 +88,8 @@ export function VisualizerProvider({ children, user, activeView, showToast, show
     },
     { customConfigs, fetchCustomConfigs },
     showToast,
-    showConfirm
+    showConfirm,
+    () => annotationsState.setDrawMode(false)
   );
 
   const exportState = useExportState();

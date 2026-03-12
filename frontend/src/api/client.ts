@@ -123,13 +123,16 @@ export const configsApi = {
 function normalizeRotationSnapshot(raw: unknown): {
   players: SavedVisualizerConfig["rotations"][0]["players"];
   annotations: SavedVisualizerConfig["rotations"][0]["annotations"];
+  serveAnnotations?: SavedVisualizerConfig["rotations"][0]["annotations"];
 } {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const players = Array.isArray(o.players) ? o.players : [];
   const annotations = Array.isArray(o.annotations) ? o.annotations : [];
+  const serveAnnotations = Array.isArray(o.serveAnnotations) ? o.serveAnnotations : [];
   return {
     players: players.map((p: unknown) => normalizeConfigPlayer(p)),
     annotations: annotations.map((a: unknown) => normalizeConfigAnnotation(a)),
+    serveAnnotations: serveAnnotations.map((a: unknown) => normalizeConfigAnnotation(a)),
   };
 }
 

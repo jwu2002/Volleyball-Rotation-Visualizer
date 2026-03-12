@@ -20,6 +20,8 @@ export type SavedAnnotation = {
 export type RotationSnapshot = {
   players: SavedPlayer[];
   annotations: SavedAnnotation[];
+  /** When present, annotations for "Serve" mode for this rotation; main `annotations` is for "Receive". */
+  serveAnnotations?: SavedAnnotation[];
 };
 
 export type SavedVisualizerConfigPayload = {

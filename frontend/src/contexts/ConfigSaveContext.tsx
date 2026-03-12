@@ -6,13 +6,9 @@ export type ConfigSaveContextValue = {
   newName: string;
   newSystem: "5-1" | "6-2";
   newRotation: number;
-  saveConfigMode: "one" | "multi";
-  saveRotationOne: number;
   saveRotationsMulti: boolean[];
   setNewName: (v: string) => void;
   setShowSaveModal: (v: boolean) => void;
-  setSaveConfigMode: (v: "one" | "multi") => void;
-  setSaveRotationOne: (v: number) => void;
   setSaveRotationsMulti: React.Dispatch<React.SetStateAction<boolean[]>>;
   handleSaveNewConfig: () => void;
   handleOverwriteCurrentConfig: () => void;
